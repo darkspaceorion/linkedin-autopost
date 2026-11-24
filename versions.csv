@@ -1,0 +1,14 @@
+version,kind,era,label,pushed,first_post,change,snapshot
+v1,writing,v1,Old workflow,2026-09-01,2026-09-01,"Old workflow ""Linked IN Daily Post"": one prompt, posted on approval.",
+v2,writing,v2,Rebuild,2026-10-10,2026-10-12,"Rebuild: weekly pillars (concept, news, skill, take, myth), 8 news feeds, guardrails, approval email.",
+v3,writing,v3,Random post time,2026-10-19,2026-10-20,"Post time: random 8:00-10:30 Chicago after approval, not instant.",
+v4,writing,v4,Article links,2026-10-22,2026-10-23,"Window 8:00-9:45, ""Read the article"" link on news posts.",
+v5,writing,v6,Hooks + build log,2026-10-29,2026-10-30,"Hook, point of view and logistics rules (v5).",
+v6,writing,v6,Hooks + build log,2026-10-29,2026-10-30,"Friday build log from the Thursday 2pm ask, optional picture (v6, pushed the same day).",backups/workflow-v2-live.20261031-1314-pre-v7.json
+v7,writing,v7,Voice,2026-10-31,2026-11-02,"Voice: written as public Josh from writing-voice.md, keeps his own words.",
+v8,process,v7,Edit button,2026-11-04,2026-11-05,"v8: Edit it button on the approval email, edit notes saved (writer unchanged).",snapshots/v8.1/workflow-live.json
+v8.1,process,v7,Rename,2026-11-06,2026-11-06,v8.1: renamed to LinkedIn Daily Post v8 (title only).,snapshots/v8.1/workflow-live.json
+v9,writing,v9,v9: writer moved,2026-11-20,2026-11-23,"v9: writer moved to Claude Opus 5.5. No numbered lists or takeaway lines, worn phrases banned and checked in code, a different post shape each day, logistics angle only where it fits, short takes get short posts.",snapshots/v9/workflow-live.json
+v9.1,process,v9,v9.1: test triggers,2026-11-20,2026-11-23,v9.1: test triggers removed (writer unchanged).,snapshots/v9.1/workflow-live.json
+v9.2,writing,v9.2,v9.2: numbered lists,2026-11-20,2026-11-23,"v9.2: numbered lists allowed when the content is genuinely steps or separate items, never by default.",snapshots/v9.2/workflow-live.json
+v9.3,writing,v9.3,160-word cap,2026-11-22,2026-11-23,"Posts capped at 160 words. LONG format dropped, now 40% short (60-100) and 60% medium (120-160). A first draft over 160 words goes back for one rewrite.",snapshots/v9.3/workflow-live.json

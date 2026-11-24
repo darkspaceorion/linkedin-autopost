@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+snapshots/
+backups/
+analytics/*.csv
+analytics/exports/
+analytics/dashboard.html
+analytics/weekly-report.md

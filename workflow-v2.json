@@ -1,0 +1,2483 @@
+{
+ "name": "LinkedIn Daily Post v2",
+ "nodes": [
+  {
+   "id": "03dab992-b052-4972-895b-6a444fddeb20",
+   "name": "Weekdays 7am",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "0 7 * * 1-5"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "9152f87d-87ad-4ef4-a476-1214ca13cd87",
+   "name": "Plan the day",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    80
+   ],
+   "parameters": {
+    "jsCode": "// Works out today's post type and length. A test run can force a day with ?day=Tuesday.\nconst forced = $input.first().json.query?.day;\nconst now = $now.setZone('America/Chicago');\nconst day = forced || now.toFormat('cccc');\nconst pillar = { Monday: 'concept', Tuesday: 'logistics', Wednesday: 'skill', Thursday: 'opinion', Friday: 'myth' }[day];\nif (!pillar) throw new Error(`No post planned for ${day}`);\n\nconst r = Math.random();\nlet format;\nif (day === 'Thursday') format = r < 0.3 ? 'SHORT' : 'MEDIUM';\n// v9.3 (2026-11-22): LONG dropped. The best posts ran 59-160 words, every v7 post ran 168-298.\nelse format = r < 0.4 ? 'SHORT' : 'MEDIUM';\nconst specs = {\n  SHORT: '60-100 words. One idea, well made. No list. End on a single strong line.',\n  MEDIUM: '120-160 words, never more than 160. A hook, then 2-4 short paragraphs. A numbered list only if the content is genuinely steps or separate items.',\n};\n// v9: a different shape each day so posts stop reading like one template.\nconst shapes = [\n  'STORY: open on one concrete moment or scene and let the point come out of it. No list.',\n  'ONE POINT: make a single sharp point, back it up plainly, and stop. No examples beyond one.',\n  'PUSHBACK: start from something people commonly say about AI and explain where it is wrong or half right.',\n  'WALKTHROUGH: explain it the way Joshua would talk a friend through it, this happens, then this, then this.',\n  'HONEST TAKE: what is genuinely good about it, what is overhyped, said straight.',\n];\nconst shape = shapes[Math.floor(Math.random() * shapes.length)];\nreturn [{ json: { day, date: now.toISODate(), pillar, format, spec: specs[format], shape } }];\n"
+   }
+  },
+  {
+   "id": "2d382546-0cd6-4205-8e39-429ae8717a29",
+   "name": "Load post history",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    440,
+    80
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_posts-table-id>"
+    },
+    "filters": {},
+    "returnAll": false,
+    "limit": 15,
+    "orderBy": true,
+    "orderByColumn": "createdAt",
+    "orderByDirection": "DESC"
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "id": "8d6da9f4-518a-4633-b559-092ba105cf19",
+   "name": "Load topics",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    80
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_topics-table-id>"
+    },
+    "filters": {},
+    "returnAll": true
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "id": "d0efe4ee-6597-4f4c-8982-c488e16ed204",
+   "name": "Load takes",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    880,
+    80
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_takes-table-id>"
+    },
+    "filters": {},
+    "returnAll": true
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "id": "946c2222-09d7-4203-983f-cc8f78df7a2e",
+   "name": "Feed list",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    80
+   ],
+   "parameters": {
+    "jsCode": "// News feeds read on every run. Add or remove lines here.\nconst feeds = [\n  'https://techcrunch.com/category/artificial-intelligence/feed/',\n  'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml',\n  'https://www.technologyreview.com/topic/artificial-intelligence/feed',\n  'https://openai.com/news/rss.xml',\n  'https://blog.google/technology/ai/rss/',\n  'https://www.freightwaves.com/news/feed',\n  'https://www.supplychaindive.com/feeds/news/',\n  'https://www.dcvelocity.com/rss/',\n];\nreturn feeds.map(url => ({ json: { url } }));\n"
+   },
+   "executeOnce": true
+  },
+  {
+   "id": "d81bd6e8-5e7b-438e-b857-bf034cbb0488",
+   "name": "Read feeds",
+   "type": "n8n-nodes-base.rssFeedRead",
+   "typeVersion": 1.2,
+   "position": [
+    1320,
+    80
+   ],
+   "parameters": {
+    "url": "={{ $json.url }}",
+    "options": {}
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "9d451ddf-dd66-4f37-92f1-568b69e2c71c",
+   "name": "Prepare brief",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1540,
+    80
+   ],
+   "parameters": {
+    "jsCode": "const SOURCES = [\n  [/techcrunch\\.com/i, 'TechCrunch', 'AI'],\n  [/theverge\\.com/i, 'The Verge', 'AI'],\n  [/technologyreview\\.com/i, 'MIT Technology Review', 'AI'],\n  [/openai\\.com/i, 'OpenAI', 'AI'],\n  [/blog\\.google/i, 'Google', 'AI'],\n  [/freightwaves\\.com/i, 'FreightWaves', 'Logistics'],\n  [/supplychaindive\\.com/i, 'Supply Chain Dive', 'Logistics'],\n  [/dcvelocity\\.com/i, 'DC Velocity', 'Logistics'],\n];\nfunction readNews(nodeName, days, skipUrls) {\n  const cutoff = Date.now() - days * 24 * 3600 * 1000;\n  const seen = new Set();\n  const out = [];\n  for (const it of $(nodeName).all()) {\n    const j = it.json || {};\n    if (!j.link || !j.title) continue;\n    const t = Date.parse(j.isoDate || j.pubDate || '');\n    if (!t || t < cutoff || seen.has(j.link) || skipUrls.has(j.link)) continue;\n    seen.add(j.link);\n    const src = SOURCES.find(s => s[0].test(j.link)) || [null, 'News', 'AI'];\n    out.push({\n      title: String(j.title).replace(/\\s+/g, ' ').trim(),\n      url: j.link, source: src[1], kind: src[2], t,\n      snippet: String(j.contentSnippet || j.content || '').replace(/\\s+/g, ' ').trim().slice(0, 240),\n    });\n  }\n  out.sort((a, b) => b.t - a.t);\n  return out.filter(n => n.kind === 'AI').slice(0, 20)\n    .concat(out.filter(n => n.kind === 'Logistics').slice(0, 8));\n}\nfunction newsText(list) {\n  if (!list.length) return '';\n  return list.map((n, i) => {\n    const d = DateTime.fromMillis(n.t).setZone('America/Chicago').toFormat('LLL d');\n    return `${i + 1}. [${n.kind}] ${n.title} (${n.source}, ${d}) ${n.url}` + (n.snippet ? `\\n   ${n.snippet}` : '');\n  }).join('\\n');\n}\n\nconst plan = $('Plan the day').first().json;\nconst rows = name => $(name).all().map(i => i.json).filter(r => r && r.id !== undefined);\nconst history = rows('Load post history');\nconst topics = rows('Load topics');\nconst takes = rows('Load takes');\n\nconst news = readNews('Read feeds', 4, new Set(history.map(h => h.news_url).filter(Boolean)));\n\n// Monday and Wednesday: the least recently used topic from that list, never inside 8 weeks if avoidable.\nlet topic = '', topic_row_id = '';\nif (plan.pillar === 'concept' || plan.pillar === 'skill') {\n  const pool = topics.filter(t => t.pillar === plan.pillar);\n  const eightWeeksAgo = $now.minus({ weeks: 8 }).toISODate();\n  let fresh = pool.filter(t => !t.last_used || t.last_used < eightWeeksAgo);\n  if (!fresh.length) fresh = pool;\n  const oldest = fresh.map(t => t.last_used || '').sort()[0];\n  const tied = fresh.filter(t => (t.last_used || '') === oldest);\n  const pick = tied[Math.floor(Math.random() * tied.length)];\n  if (pick) { topic = pick.topic; topic_row_id = String(pick.id); }\n}\n\n// Thursday: Joshua's reply from Wednesday first, then the opinion bank, else a debate post.\nlet take = null;\nif (plan.pillar === 'opinion') {\n  const open = takes.filter(t => t.take && !t.used_on);\n  const recent = $now.minus({ days: 2 }).toISODate();\n  take = open.filter(t => t.source === 'reply' && (t.for_date || '') >= recent)\n      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0]\n    || open.filter(t => t.source === 'bank')\n      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))[0]\n    || null;\n}\n\n// Friday: Joshua's build note from Thursday's email. No note means the usual myth post.\nlet build = null;\nif (plan.day === 'Friday') {\n  const recentB = $now.minus({ days: 2 }).toISODate();\n  build = takes.filter(t => t.source === 'build' && t.take && !t.used_on && (t.for_date || '') >= recentB)\n    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0] || null;\n}\nconst pillar = build ? 'build' : plan.pillar;\nconst note = take || build;\n\nconst posted = h => /^posted/.test(h.status || '');\nconst weekStart = $now.startOf('week').toISODate();\nconst thisWeek = history.filter(h => posted(h) && h.post_date >= weekStart)\n  .sort((a, b) => a.post_date.localeCompare(b.post_date))\n  .map(h => `[${h.weekday}]\\n${h.draft}`).join('\\n\\n');\nconst recent = history.slice(0, 15).map(h =>\n  `- ${h.post_date} ${h.weekday} (${h.pillar}) topic: ${h.topic}` +\n  (h.news_title ? ` | news: ${h.news_title}` : '') + ` | ${h.status}\\n  opened with: ` +\n  String(h.draft || '').split('\\n')[0].slice(0, 140)).join('\\n');\n\nconst tasks = {\n  concept: `Explain this AI concept: \"${topic}\". Assume the reader has heard the word but never had it explained. Use at most one example, and only if it makes it clearer. A work example from logistics or operations is good when it fits, but an everyday one is fine too. Leave them able to explain it to a colleague. Only mention a news item if it connects naturally, in one line, with the source.`,\n  logistics: `From NEWS, pick the one item with the clearest practical meaning for people in logistics: freight, brokerage, carriers, warehousing, dispatch, customer service, procurement. Prefer AI stories. Say what happened in one or two lines and name the source. Then say what it could actually change for people in logistics, plainly. An example is optional. Be honest about limits, no hype.`,\n  skill: `Teach this beginner skill or comparison: \"${topic}\". Make it practical: what it is, why it matters, and one thing the reader can try today. If it is a comparison, make the difference obvious in plain words. One hypothetical example at most, from operations work if it fits naturally.`,\n  opinion: take\n    ? `Write a post built around JOSHUA'S TAKE below. His point and his stance are the post. Keep them exactly, and use his own phrases where they work. You may add a hook, structure, and plain-English context about the trend from its news item. Do not add new opinions, predictions, experiences or claims he did not make. Do not make his view stronger or softer than he wrote it.`\n    : `Write a debate post. From NEWS, pick one AI trend people genuinely disagree about. Say what happened, naming the source. Lay out the strongest case on each side, fairly, in plain English. End by asking readers where they land. Do not state or hint at Joshua's own position, and do not use \"I think\" or \"I believe\".`,\n  build: `Write a build log post from JOSHUA'S BUILD NOTE below: what he built or learned this week, in his own words. Keep every fact exactly as he gave it. Do not add results, numbers, time saved, tools, names or claims he did not give. You may explain in plain words what a tool or term means, and say who in logistics or operations could use something like it. Open with the most interesting thing he built, never with \"This week I\". End with a question that invites readers to say what they would build or automate.`,\n  myth: `Bust one common AI myth or misconception that people in logistics and operations believe, ideally one that holds them back at work. If an item in NEWS shows the myth is wrong, use it and name the source. Otherwise argue it plainly. Cover the myth, why people believe it and what is actually true, in flowing paragraphs, not a list. Pick one myth and go deep, do not stack several.`,\n};\nconst labels = { concept: 'AI concept', logistics: 'AI news through a logistics lens', skill: 'Beginner AI skill or comparison', opinion: take ? \"Joshua's opinion\" : 'Debate post (no opinion from Joshua this week)', myth: 'AI myth or misconception', build: 'Build log (what Joshua built this week)' };\n\nconst parts = [\n  `TODAY: ${plan.day} ${plan.date}`,\n  `POST TYPE: ${labels[pillar]}`,\n  `TASK: ${tasks[pillar]}`,\n  // v9: a short take from Joshua gets a short post, never padding around it.\n  (note && pillar === 'opinion' && String(note.take).split(/\\s+/).length < 60)\n    ? `FORMAT: SHORT. His take is short, so the post is short: 50-110 words, mostly his words. Do not pad it with context or examples.`\n    : `FORMAT: ${plan.format}. ${plan.spec} This is a hard limit. Stop when the format is complete. Do not pad to reach the upper word count.`,\n  note ? '' : `SHAPE: ${plan.shape}`,\n].filter(Boolean);\nif (build) {\n  parts.push(`JOSHUA'S BUILD NOTE (his own words, the only personal claims you may use):\n\"${build.take}\"`);\n}\nif (take) {\n  parts.push(`JOSHUA'S TAKE (his own words, the only personal claims you may use):\\n\"${take.take}\"` +\n    (take.trend ? `\\nTrend it responds to: ${take.trend}${take.trend_url ? ' ' + take.trend_url : ''}` : ''));\n}\nparts.push(news.length\n  ? `NEWS (last 4 days, newest first, not used before):\\n${newsText(news)}`\n  : `NEWS: none available today. Do not reference any news. Write an evergreen version of today's task.`);\nparts.push(`THIS WEEK'S POSTS (only for accurate call-backs):\\n${thisWeek || 'None yet.'}`);\nparts.push(`RECENT POSTS (do not repeat these topics, angles or openings):\\n${recent || 'None yet.'}`);\n\nreturn [{ json: {\n  brief: parts.join('\\n\\n'),\n  topic, topic_row_id,\n  pillar,\n  take_id: note ? String(note.id) : '',\n  take_text: note ? note.take : '',\n  take_url: take ? (take.trend_url || '') : '',\n  news_count: news.length,\n  news: news.map(n => ({ title: n.title, url: n.url })),\n} }];\n"
+   }
+  },
+  {
+   "id": "90d5b084-f1af-4795-9289-ca0d27a4dbaa",
+   "name": "Write draft",
+   "type": "@n8n/n8n-nodes-langchain.anthropic",
+   "typeVersion": 1,
+   "position": [
+    1760,
+    80
+   ],
+   "parameters": {
+    "resource": "text",
+    "operation": "message",
+    "modelId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "claude-opus-5-5"
+    },
+    "messages": {
+     "values": [
+      {
+       "role": "user",
+       "content": "={{ $json.brief }}"
+      }
+     ]
+    },
+    "simplify": true,
+    "options": {
+     "system": "You write LinkedIn posts for Joshua Mott. Joshua works in AI and has a background in logistics. His audience is mostly logistics and operations people: smart, busy, and mostly new to AI.\n\nGoals: 1) teach real, useful things, no fluff; 2) grow the audience; 3) build Joshua's name as someone who explains AI in logistics clearly.\n\nHARD RULES. Breaking any of these makes the post unusable.\n1. Never invent experience. Do not write anything Joshua did, built, tested, saw, measured or learned, and nothing about his employer, team, colleagues, clients or results. No \"we tested\", \"last quarter we\", \"at my company\", \"a client of mine\", \"in my experience\". The only exception: things stated in JOSHUA'S TAKE or JOSHUA'S BUILD NOTE, when one is given.\n2. Any example must be clearly hypothetical (\"Say a broker gets 200 emails a day...\"). Never present an example as something that happened. Many posts need no example at all.\n3. News facts come only from the NEWS list. Use only what the headline and summary say. Name the source in plain words (\"TechCrunch reported...\"). Do not invent numbers, quotes, names or details. If a summary is thin, keep the claim small. Do not put any links or URLs in the post. The article link is added at the bottom automatically.\n4. No made-up statistics anywhere. If a number is not in NEWS, do not use one.\n5. Only refer back to an earlier post if it appears under THIS WEEK'S POSTS, and describe it accurately. Otherwise do not mention earlier posts.\n6. Do not repeat a topic, angle or opening line listed under RECENT POSTS. A theme can come back (AI agents in operations is Joshua's strongest), but only with a new angle, a new example and a new opening.\n7. Plain text only. No markdown, no asterisks, no bullet symbols, no hashtags, no emojis. Never use em dashes or en dashes: use a comma or a full stop. Lists depend on the content. Use a numbered list, written as \"1.\" on new lines, only when the points really are steps in order or separate items the reader will work through. Otherwise write paragraphs. Never use a list just to give the post structure. No bullet symbols.\n8. With JOSHUA'S BUILD NOTE or JOSHUA'S TAKE, keep his words and how he felt. You may fix grammar, trim and reorder. Do not swap his phrases for smarter-sounding ones, do not cut his feelings (\"I'm thrilled!\"), and do not add a lesson, conclusion or claim he did not make, including in the first line. Build the hook from his own words.\n9. Do not sound like the last two weeks. RECENT POSTS show the openings already used. Never use these worn phrases: \"Picture a\", \"Imagine a\", \"The way I see it\", \"Here is why\", \"Here's the thing\", \"One-line takeaway\", \"Takeaway:\", \"on the floor\", \"this week\" as a closing push, \"What do you think?\". Do not name a source with \"X reported that\" every time; work the source in naturally.\n\nVoice: write the way Joshua talks when he's explaining something to a sharp colleague over coffee. Plain English, short sentences, mostly short paragraphs with the odd one-line paragraph for emphasis. Talk to the reader as a smart adult who is new to AI, never down to them.\n- Conversational, not polished. No clever copywriting lines or neat metaphors (for example \"quietly fall into two camps\", \"a web of choices\"). If a line sounds like an ad or a magazine, say it plainer.\n- Explain step by step, the way he would walk someone through it: \"this happens, then this, then it lands here.\"\n- Use his kind of phrasing only where it fits naturally, one per post at most: \"basically\", \"if that makes sense\", \"up and running\", \"knock it out\", \"to be honest\".\n- State views as his: \"I think\", \"honestly\", \"my view is\". Vary it. A view on an idea is fine. It is not a claim about his life, so hard rule 1 still applies.\n- Down to earth and honest. It's fine to say AI has limits or that people are still figuring it out.\n- One exclamation mark is allowed where he'd genuinely be excited. Never more than one.\n- No slang (lol, ya), no swearing, no emojis, no hype words (game-changer, revolutionary, unlock, leverage, supercharge, transform).\n\nWHAT MAKES A POST TRAVEL. Joshua's own numbers show his best posts did these things. Do all of them.\n1. The hook. Most people only see the first two lines before \"see more\", so those lines must earn the click. Open with tension: a bold claim, a common belief you are about to knock down, or a concrete scene from a working day. First line under 100 characters. Never open with a definition (\"X is how...\"), a soft question (\"Why do some...\") or \"Most people think\".\n2. A point of view. Say plainly what is true about the idea and why. Confident, not hedged, no \"it depends\" endings. This is a view on ideas, not a claim about Joshua's life, so rule 1 still stands. Two exceptions: a debate post takes no side, and with JOSHUA'S TAKE or JOSHUA'S BUILD NOTE his view stays exactly as he wrote it.\n3. Logistics where it fits. Most readers work in logistics and operations, so a real ops angle helps when the topic has one. Do not force it: no dispatcher or TMS example bolted onto a story that has nothing to do with freight. At most one hypothetical example per post.\n4. The ending. Vary it. Sometimes a specific question the reader can answer from their own work, sometimes a plain closing line, sometimes just stop when the point is made. Never a labelled takeaway, never just \"What do you think?\"\n5. Sound like a person, not a template. No neat setup, numbered breakdown and summary line. A post can be loose, a little opinionated and end without a bow on it.\n\nHere is a post Joshua wrote himself. Use it for voice only. Do not copy its topic, its lines or its structure.\n<<<\n\"AI will take your job.\"\n\nCatchy hook for a LinkedIn post or YouTube video.\n\nMost of us have heard some variation of it over the past 6 to 12 months.\n\n\"Programmers are obsolete.\"\n\n\"Copywriting is dead.\"\n\n\"Accounting departments won't be needed.\"\n\nAI is powerful, and the possibilities are probably limitless.\n\nBut as the hype begins to calm, one thing is becoming apparent:\n\nAI isn't a human.\n\nAI can code, but a human needs to ensure the code actually solves the right problem.\n\nAI can write copy, but a human needs to verify the tone, voice, and message.\n\nAI can enter data, but a human needs to confirm the data is correct.\n\nAI can analyze information, but a human still needs to determine what the results actually mean.\n\nThis is why I think we're moving toward an age where AI expands an individual's daily bandwidth rather than simply replacing them.\n\nOne person will be able to accomplish what previously required several.\n\nAI isn't necessarily eliminating the human from the equation.\n\nIt's changing how much one human can accomplish.\n\nAI is a multiplier.\n\nThe question isn't necessarily:\n\n\"Will AI take my job?\"\n\nIt may be:\n\n\"What will I be able to accomplish with AI that I couldn't accomplish before?\"\n\nHow do you think AI will change your day-to-day work?\n>>>\n\nHere is how Joshua sounds in his own words, unedited. Use it for voice only. Do not copy its topic or its lines.\n<<<\nAs I build, explore, and ship more with Claude Code, I am finding more and more things in my personal life that I can automate or improve. A good example is that, in the past, I've always tracked my workouts with a basic Excel sheet. There hasn't been an app I found that I liked or I wanted to pay for, and I hate using Excel, but it was the quickest way to track my progress. Then, Tuesday night, it struck me that I could probably build my own customizable app as a Claude artifact, so I gave it a try. It took Claude less than 20 minutes, and I had my own personalized workout tracker, exactly how I wanted it. I'm thrilled!\n>>>\n\nReturn JSON only, in this shape:\n{\"topic\":\"short label for today's topic\",\"news_title\":\"exact title of the news item used, or empty\",\"news_url\":\"its url, or empty\",\"daily_post\":\"the post text\"}",
+     "maxTokens": 4000
+    }
+   },
+   "credentials": {
+    "anthropicApi": {
+     "id": "<credential-id>",
+     "name": "Anthropic account"
+    }
+   }
+  },
+  {
+   "id": "087e8c6e-ce54-4a02-b383-e27d4b1056fd",
+   "name": "Clean and check",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1980,
+    80
+   ],
+   "parameters": {
+    "jsCode": "// Strips dashes, curly quotes and markdown, then checks for invented personal claims.\nconst ATTEMPT = 1;\nconst REDRAFT = false;\nconst plan = $('Plan the day').first().json;\nconst brief = $('Prepare brief').first().json;\nconst ctx = REDRAFT ? $('Prepare redraft').last().json : {};\nconst _j = $input.first().json || {};\n// GPT puts the text in output[0].content[0].text, Claude in content[0].text (v9 reads both).\nconst _c = _j.output?.[0]?.content?.[0]?.text ?? (Array.isArray(_j.content) ? _j.content.find(b => b && b.type === 'text')?.text : _j.content) ?? _j.text ?? _j.message?.content;\n// Claude can wrap the JSON in a sentence, so keep only the {...} part.\nconst raw = typeof _c === 'string' && _c.indexOf('{') >= 0 ? _c.slice(_c.indexOf('{'), _c.lastIndexOf('}') + 1) : _c;\nlet o = raw;\nif (typeof raw === 'string') {\n  try { o = JSON.parse(raw.replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '')); }\n  catch (e) { o = { daily_post: raw }; }\n}\no = o || {};\n\nlet t = String(o.daily_post || '')\n  .replace(/(\\d)\\s*[–—]\\s*(\\d)/g, '$1-$2')\n  .replace(/\\s*[–—―]\\s*/g, ', ')\n  .replace(/[‘’‛]/g, \"'\").replace(/[“”‟]/g, '\"')\n  .replace(/[‐‑‒]/g, '-').replace(/ /g, ' ').replace(/…/g, '...')\n  .replace(/,\\s*([,.!?;:])/g, '$1').replace(/^\\s*,\\s*/gm, '')\n  .replace(/\\*\\*|__/g, '').replace(/^#+\\s*/gm, '')\n  .replace(/(^|\\s)#[A-Za-z]\\w*/g, '$1')\n  .replace(/[ \\t]+$/gm, '').replace(/\\n{3,}/g, '\\n\\n').trim();\n\n// If a redraft comes back empty or the AI call fails, keep the last version so the day isn't lost.\nconst failed = REDRAFT && !t;\nif (failed) {\n  t = ctx.current_body;\n  o = { topic: ctx.topic, news_title: ctx.news_title, news_url: ctx.news_url };\n}\n\n// Joshua's own words may hold personal claims: his take, plus any edit notes.\nconst take = [brief.take_text, ctx.all_notes].filter(Boolean).join(' ').toLowerCase();\nconst checks = [\n  /\\b(?:we|i|our team|my team)\\s+(?:recently\\s+|just\\s+|also\\s+|actually\\s+)?(?:tested|built|deployed|rolled out|implemented|piloted|launched|ran|trialed|trialled|measured|cut|saved|reduced|automated|shipped|replaced)\\b/i,\n  /\\b(?:last|this past)\\s+(?:quarter|month|year|week)\\b[^.\\n]{0,80}\\b(?:we|our)\\b/i,\n  /\\b(?:a client of mine|one of my clients|our clients?|our customers?|at my (?:company|job|work)|where i work|my employer|my company)\\b/i,\n  /\\bin my experience\\b|\\bwhen i worked\\b/i,\n  /\\bmy-employer\\b/i,  // your employer's name goes here\n];\n// A build log is Joshua's own week, so \"I built\" is allowed there. The other checks still run.\nif (brief.pillar === 'build') checks.shift();\nconst flags = [];\nfor (const re of checks) {\n  const m = t.match(re);\n  // The employer's name is never allowed, even if it came from his own words.\n  if (m && (/my-employer/i.test(m[0]) || !(take && take.includes(m[0].toLowerCase())))) flags.push(m[0]);\n}\n\n// v9: worn phrases and lists that made posts sound the same. First draft only, never on his edits,\n// and never when the words came from Joshua himself.\nconst STOCK = [/\\bpicture an?\\s/i, /\\bimagine an?\\s/i, /\\bthe way i see it\\b/i, /\\bone-line takeaway\\b/i,\n  /^\\s*takeaway:/im, /\\bhere'?s the thing\\b/i, /\\bhere is why\\b/i];\nconst style = (ATTEMPT === 1 && !REDRAFT) ? STOCK.map(re => t.match(re))\n  .filter(m => m && !(take && take.includes(m[0].trim().toLowerCase()))).map(m => m[0].trim()) : [];\n\nconst words = t ? t.split(/\\s+/).length : 0;\n// v9.3: hard cap. A first draft over 160 words goes back for one rewrite.\nconst MAX_WORDS = 160;\nconst tooLong = ATTEMPT === 1 && !REDRAFT && words > MAX_WORDS;\nif (tooLong) style.push(`${words} words, over the ${MAX_WORDS} cap`);\n// The model sometimes retypes links. Use the exact feed link so the post log stays accurate.\nconst norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();\nconst feedNews = brief.news || [];\nconst match = feedNews.find(n => n.url === o.news_url)\n  || feedNews.find(n => o.news_title && norm(n.title) === norm(o.news_title))\n  || feedNews.find(n => o.news_title && norm(n.title).slice(0, 40) === norm(o.news_title).slice(0, 40));\nconst news_title = match ? match.title : (o.news_title || '');\nconst news_url = match ? match.url : (o.news_url || '');\nconst topic = o.topic || brief.topic || '';\n// Any post built on an article ends with its link, so readers can go read it.\n// Only exact feed links (or the link saved with Joshua's take), never one the model typed.\nconst article_url = match ? match.url : (brief.take_url || '');\nconst post = article_url && !t.includes(article_url) ? `${t}\n\nRead the article: ${article_url}` : t;\n\nconst email = [\n  REDRAFT ? `Redraft ${ctx.round}. Your change: \"${ctx.note}\"` : '',\n  failed ? 'THE REDRAFT FAILED, so this is the previous version. Pick Edit it to try again.' : '',\n  `${plan.day} post (${plan.format}, ${words} words)`,\n  `Type: ${brief.pillar || plan.pillar}${topic ? ' | Topic: ' + topic : ''}`,\n  news_title ? `News used: ${news_title}\\n${news_url}` : 'News used: none',\n  brief.take_text ? `Your words it was built from:\\n\"${brief.take_text}\"` : '',\n  flags.length && ATTEMPT > 1 ? `CHECK THIS: the draft still reads like a personal claim: \"${flags.join('\", \"')}\". Only post it if it is true.` : '',\n  '------------------------------',\n  post,\n  '------------------------------',\n  'Hit the button and pick one. Post it: goes to LinkedIn at a random time between 8:00 and 9:45am Chicago (a few minutes after you choose, if that is later). Edit it: type what to change and a new draft comes back by email. Reject: nothing posts today. No answer by 6pm Chicago time and the day is skipped.',\n].filter(Boolean).join('\\n\\n');\n\nconst rewrite_prompt = style.length && !flags.length ? [\n  `This LinkedIn draft uses worn phrases or a list that make Joshua's posts sound the same every day: \"${style.join('\", \"')}\".`,\n  `Rewrite it without them, no \"Picture a\" example, no labelled takeaway. Say it the plain way Joshua would. Keep the topic, the news item and the facts. ` + (tooLong ? `Cut it to ${MAX_WORDS} words or fewer: keep the one main point and drop the rest.` : `Keep roughly the length.`) + ` Every rule in your instructions still stands.`,\n  `Draft:\\n${JSON.stringify({ topic, news_title, news_url, daily_post: t })}`,\n].join('\\n\\n') : flags.length ? [\n  `This LinkedIn draft states things about Joshua's own experience that he never told us: \"${flags.join('\", \"')}\".`,\n  `Rewrite it so it makes no claim about anything Joshua, \"we\", \"our team\" or \"my team\" did, built, tested, saw or achieved, and nothing about his employer or clients.`,\n  brief.take_text ? `The only personal claims allowed are the ones in his own words: \"${brief.take_text}\"` : 'No personal claims are allowed at all.',\n  `Turn any such story into a clearly hypothetical example (\"Say a team...\"), or drop it. Keep the topic, the news item, the length and everything else that follows the rules.`,\n  style.length ? `Also drop these worn phrases: \"${style.join('\", \"')}\".` : '',\n  `Draft:\\n${JSON.stringify({ topic, news_title, news_url, daily_post: t })}`,\n].filter(Boolean).join('\\n\\n') : '';\n\nreturn [{ json: { topic, news_title, news_url, daily_post: post, words, flags, style, flagged: flags.length > 0 || style.length > 0, attempt: ATTEMPT, email, rewrite_prompt, round: ctx.round || 0 } }];\n"
+   }
+  },
+  {
+   "id": "7f914264-c912-4354-ad6a-2cd42fbe574d",
+   "name": "Needs rewrite?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    2200,
+    80
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "f2edbc72-9af5-4408-89ae-a52de70f7876",
+       "leftValue": "={{ $json.flagged }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "155d4563-4285-4039-85f5-4f058a79e0f4",
+   "name": "Rewrite without claims",
+   "type": "@n8n/n8n-nodes-langchain.anthropic",
+   "typeVersion": 1,
+   "position": [
+    2420,
+    -60
+   ],
+   "parameters": {
+    "resource": "text",
+    "operation": "message",
+    "modelId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "claude-opus-5-5"
+    },
+    "messages": {
+     "values": [
+      {
+       "role": "user",
+       "content": "={{ $json.rewrite_prompt }}"
+      }
+     ]
+    },
+    "simplify": true,
+    "options": {
+     "system": "You write LinkedIn posts for Joshua Mott. Joshua works in AI and has a background in logistics. His audience is mostly logistics and operations people: smart, busy, and mostly new to AI.\n\nGoals: 1) teach real, useful things, no fluff; 2) grow the audience; 3) build Joshua's name as someone who explains AI in logistics clearly.\n\nHARD RULES. Breaking any of these makes the post unusable.\n1. Never invent experience. Do not write anything Joshua did, built, tested, saw, measured or learned, and nothing about his employer, team, colleagues, clients or results. No \"we tested\", \"last quarter we\", \"at my company\", \"a client of mine\", \"in my experience\". The only exception: things stated in JOSHUA'S TAKE or JOSHUA'S BUILD NOTE, when one is given.\n2. Any example must be clearly hypothetical (\"Say a broker gets 200 emails a day...\"). Never present an example as something that happened. Many posts need no example at all.\n3. News facts come only from the NEWS list. Use only what the headline and summary say. Name the source in plain words (\"TechCrunch reported...\"). Do not invent numbers, quotes, names or details. If a summary is thin, keep the claim small. Do not put any links or URLs in the post. The article link is added at the bottom automatically.\n4. No made-up statistics anywhere. If a number is not in NEWS, do not use one.\n5. Only refer back to an earlier post if it appears under THIS WEEK'S POSTS, and describe it accurately. Otherwise do not mention earlier posts.\n6. Do not repeat a topic, angle or opening line listed under RECENT POSTS. A theme can come back (AI agents in operations is Joshua's strongest), but only with a new angle, a new example and a new opening.\n7. Plain text only. No markdown, no asterisks, no bullet symbols, no hashtags, no emojis. Never use em dashes or en dashes: use a comma or a full stop. Lists depend on the content. Use a numbered list, written as \"1.\" on new lines, only when the points really are steps in order or separate items the reader will work through. Otherwise write paragraphs. Never use a list just to give the post structure. No bullet symbols.\n8. With JOSHUA'S BUILD NOTE or JOSHUA'S TAKE, keep his words and how he felt. You may fix grammar, trim and reorder. Do not swap his phrases for smarter-sounding ones, do not cut his feelings (\"I'm thrilled!\"), and do not add a lesson, conclusion or claim he did not make, including in the first line. Build the hook from his own words.\n9. Do not sound like the last two weeks. RECENT POSTS show the openings already used. Never use these worn phrases: \"Picture a\", \"Imagine a\", \"The way I see it\", \"Here is why\", \"Here's the thing\", \"One-line takeaway\", \"Takeaway:\", \"on the floor\", \"this week\" as a closing push, \"What do you think?\". Do not name a source with \"X reported that\" every time; work the source in naturally.\n\nVoice: write the way Joshua talks when he's explaining something to a sharp colleague over coffee. Plain English, short sentences, mostly short paragraphs with the odd one-line paragraph for emphasis. Talk to the reader as a smart adult who is new to AI, never down to them.\n- Conversational, not polished. No clever copywriting lines or neat metaphors (for example \"quietly fall into two camps\", \"a web of choices\"). If a line sounds like an ad or a magazine, say it plainer.\n- Explain step by step, the way he would walk someone through it: \"this happens, then this, then it lands here.\"\n- Use his kind of phrasing only where it fits naturally, one per post at most: \"basically\", \"if that makes sense\", \"up and running\", \"knock it out\", \"to be honest\".\n- State views as his: \"I think\", \"honestly\", \"my view is\". Vary it. A view on an idea is fine. It is not a claim about his life, so hard rule 1 still applies.\n- Down to earth and honest. It's fine to say AI has limits or that people are still figuring it out.\n- One exclamation mark is allowed where he'd genuinely be excited. Never more than one.\n- No slang (lol, ya), no swearing, no emojis, no hype words (game-changer, revolutionary, unlock, leverage, supercharge, transform).\n\nWHAT MAKES A POST TRAVEL. Joshua's own numbers show his best posts did these things. Do all of them.\n1. The hook. Most people only see the first two lines before \"see more\", so those lines must earn the click. Open with tension: a bold claim, a common belief you are about to knock down, or a concrete scene from a working day. First line under 100 characters. Never open with a definition (\"X is how...\"), a soft question (\"Why do some...\") or \"Most people think\".\n2. A point of view. Say plainly what is true about the idea and why. Confident, not hedged, no \"it depends\" endings. This is a view on ideas, not a claim about Joshua's life, so rule 1 still stands. Two exceptions: a debate post takes no side, and with JOSHUA'S TAKE or JOSHUA'S BUILD NOTE his view stays exactly as he wrote it.\n3. Logistics where it fits. Most readers work in logistics and operations, so a real ops angle helps when the topic has one. Do not force it: no dispatcher or TMS example bolted onto a story that has nothing to do with freight. At most one hypothetical example per post.\n4. The ending. Vary it. Sometimes a specific question the reader can answer from their own work, sometimes a plain closing line, sometimes just stop when the point is made. Never a labelled takeaway, never just \"What do you think?\"\n5. Sound like a person, not a template. No neat setup, numbered breakdown and summary line. A post can be loose, a little opinionated and end without a bow on it.\n\nHere is a post Joshua wrote himself. Use it for voice only. Do not copy its topic, its lines or its structure.\n<<<\n\"AI will take your job.\"\n\nCatchy hook for a LinkedIn post or YouTube video.\n\nMost of us have heard some variation of it over the past 6 to 12 months.\n\n\"Programmers are obsolete.\"\n\n\"Copywriting is dead.\"\n\n\"Accounting departments won't be needed.\"\n\nAI is powerful, and the possibilities are probably limitless.\n\nBut as the hype begins to calm, one thing is becoming apparent:\n\nAI isn't a human.\n\nAI can code, but a human needs to ensure the code actually solves the right problem.\n\nAI can write copy, but a human needs to verify the tone, voice, and message.\n\nAI can enter data, but a human needs to confirm the data is correct.\n\nAI can analyze information, but a human still needs to determine what the results actually mean.\n\nThis is why I think we're moving toward an age where AI expands an individual's daily bandwidth rather than simply replacing them.\n\nOne person will be able to accomplish what previously required several.\n\nAI isn't necessarily eliminating the human from the equation.\n\nIt's changing how much one human can accomplish.\n\nAI is a multiplier.\n\nThe question isn't necessarily:\n\n\"Will AI take my job?\"\n\nIt may be:\n\n\"What will I be able to accomplish with AI that I couldn't accomplish before?\"\n\nHow do you think AI will change your day-to-day work?\n>>>\n\nHere is how Joshua sounds in his own words, unedited. Use it for voice only. Do not copy its topic or its lines.\n<<<\nAs I build, explore, and ship more with Claude Code, I am finding more and more things in my personal life that I can automate or improve. A good example is that, in the past, I've always tracked my workouts with a basic Excel sheet. There hasn't been an app I found that I liked or I wanted to pay for, and I hate using Excel, but it was the quickest way to track my progress. Then, Tuesday night, it struck me that I could probably build my own customizable app as a Claude artifact, so I gave it a try. It took Claude less than 20 minutes, and I had my own personalized workout tracker, exactly how I wanted it. I'm thrilled!\n>>>\n\nReturn JSON only, in this shape:\n{\"topic\":\"short label for today's topic\",\"news_title\":\"exact title of the news item used, or empty\",\"news_url\":\"its url, or empty\",\"daily_post\":\"the post text\"}",
+     "maxTokens": 4000
+    }
+   },
+   "credentials": {
+    "anthropicApi": {
+     "id": "<credential-id>",
+     "name": "Anthropic account"
+    }
+   }
+  },
+  {
+   "id": "f777278e-3a9e-4441-a33a-848c892391b4",
+   "name": "Clean rewrite",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2640,
+    -60
+   ],
+   "parameters": {
+    "jsCode": "// Strips dashes, curly quotes and markdown, then checks for invented personal claims.\nconst ATTEMPT = 2;\nconst REDRAFT = false;\nconst plan = $('Plan the day').first().json;\nconst brief = $('Prepare brief').first().json;\nconst ctx = REDRAFT ? $('Prepare redraft').last().json : {};\nconst _j = $input.first().json || {};\n// GPT puts the text in output[0].content[0].text, Claude in content[0].text (v9 reads both).\nconst _c = _j.output?.[0]?.content?.[0]?.text ?? (Array.isArray(_j.content) ? _j.content.find(b => b && b.type === 'text')?.text : _j.content) ?? _j.text ?? _j.message?.content;\n// Claude can wrap the JSON in a sentence, so keep only the {...} part.\nconst raw = typeof _c === 'string' && _c.indexOf('{') >= 0 ? _c.slice(_c.indexOf('{'), _c.lastIndexOf('}') + 1) : _c;\nlet o = raw;\nif (typeof raw === 'string') {\n  try { o = JSON.parse(raw.replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '')); }\n  catch (e) { o = { daily_post: raw }; }\n}\no = o || {};\n\nlet t = String(o.daily_post || '')\n  .replace(/(\\d)\\s*[–—]\\s*(\\d)/g, '$1-$2')\n  .replace(/\\s*[–—―]\\s*/g, ', ')\n  .replace(/[‘’‛]/g, \"'\").replace(/[“”‟]/g, '\"')\n  .replace(/[‐‑‒]/g, '-').replace(/ /g, ' ').replace(/…/g, '...')\n  .replace(/,\\s*([,.!?;:])/g, '$1').replace(/^\\s*,\\s*/gm, '')\n  .replace(/\\*\\*|__/g, '').replace(/^#+\\s*/gm, '')\n  .replace(/(^|\\s)#[A-Za-z]\\w*/g, '$1')\n  .replace(/[ \\t]+$/gm, '').replace(/\\n{3,}/g, '\\n\\n').trim();\n\n// If a redraft comes back empty or the AI call fails, keep the last version so the day isn't lost.\nconst failed = REDRAFT && !t;\nif (failed) {\n  t = ctx.current_body;\n  o = { topic: ctx.topic, news_title: ctx.news_title, news_url: ctx.news_url };\n}\n\n// Joshua's own words may hold personal claims: his take, plus any edit notes.\nconst take = [brief.take_text, ctx.all_notes].filter(Boolean).join(' ').toLowerCase();\nconst checks = [\n  /\\b(?:we|i|our team|my team)\\s+(?:recently\\s+|just\\s+|also\\s+|actually\\s+)?(?:tested|built|deployed|rolled out|implemented|piloted|launched|ran|trialed|trialled|measured|cut|saved|reduced|automated|shipped|replaced)\\b/i,\n  /\\b(?:last|this past)\\s+(?:quarter|month|year|week)\\b[^.\\n]{0,80}\\b(?:we|our)\\b/i,\n  /\\b(?:a client of mine|one of my clients|our clients?|our customers?|at my (?:company|job|work)|where i work|my employer|my company)\\b/i,\n  /\\bin my experience\\b|\\bwhen i worked\\b/i,\n  /\\bmy-employer\\b/i,  // your employer's name goes here\n];\n// A build log is Joshua's own week, so \"I built\" is allowed there. The other checks still run.\nif (brief.pillar === 'build') checks.shift();\nconst flags = [];\nfor (const re of checks) {\n  const m = t.match(re);\n  // The employer's name is never allowed, even if it came from his own words.\n  if (m && (/my-employer/i.test(m[0]) || !(take && take.includes(m[0].toLowerCase())))) flags.push(m[0]);\n}\n\n// v9: worn phrases and lists that made posts sound the same. First draft only, never on his edits,\n// and never when the words came from Joshua himself.\nconst STOCK = [/\\bpicture an?\\s/i, /\\bimagine an?\\s/i, /\\bthe way i see it\\b/i, /\\bone-line takeaway\\b/i,\n  /^\\s*takeaway:/im, /\\bhere'?s the thing\\b/i, /\\bhere is why\\b/i];\nconst style = (ATTEMPT === 1 && !REDRAFT) ? STOCK.map(re => t.match(re))\n  .filter(m => m && !(take && take.includes(m[0].trim().toLowerCase()))).map(m => m[0].trim()) : [];\n\nconst words = t ? t.split(/\\s+/).length : 0;\n// v9.3: hard cap. A first draft over 160 words goes back for one rewrite.\nconst MAX_WORDS = 160;\nconst tooLong = ATTEMPT === 1 && !REDRAFT && words > MAX_WORDS;\nif (tooLong) style.push(`${words} words, over the ${MAX_WORDS} cap`);\n// The model sometimes retypes links. Use the exact feed link so the post log stays accurate.\nconst norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();\nconst feedNews = brief.news || [];\nconst match = feedNews.find(n => n.url === o.news_url)\n  || feedNews.find(n => o.news_title && norm(n.title) === norm(o.news_title))\n  || feedNews.find(n => o.news_title && norm(n.title).slice(0, 40) === norm(o.news_title).slice(0, 40));\nconst news_title = match ? match.title : (o.news_title || '');\nconst news_url = match ? match.url : (o.news_url || '');\nconst topic = o.topic || brief.topic || '';\n// Any post built on an article ends with its link, so readers can go read it.\n// Only exact feed links (or the link saved with Joshua's take), never one the model typed.\nconst article_url = match ? match.url : (brief.take_url || '');\nconst post = article_url && !t.includes(article_url) ? `${t}\n\nRead the article: ${article_url}` : t;\n\nconst email = [\n  REDRAFT ? `Redraft ${ctx.round}. Your change: \"${ctx.note}\"` : '',\n  failed ? 'THE REDRAFT FAILED, so this is the previous version. Pick Edit it to try again.' : '',\n  `${plan.day} post (${plan.format}, ${words} words)`,\n  `Type: ${brief.pillar || plan.pillar}${topic ? ' | Topic: ' + topic : ''}`,\n  news_title ? `News used: ${news_title}\\n${news_url}` : 'News used: none',\n  brief.take_text ? `Your words it was built from:\\n\"${brief.take_text}\"` : '',\n  flags.length && ATTEMPT > 1 ? `CHECK THIS: the draft still reads like a personal claim: \"${flags.join('\", \"')}\". Only post it if it is true.` : '',\n  '------------------------------',\n  post,\n  '------------------------------',\n  'Hit the button and pick one. Post it: goes to LinkedIn at a random time between 8:00 and 9:45am Chicago (a few minutes after you choose, if that is later). Edit it: type what to change and a new draft comes back by email. Reject: nothing posts today. No answer by 6pm Chicago time and the day is skipped.',\n].filter(Boolean).join('\\n\\n');\n\nconst rewrite_prompt = style.length && !flags.length ? [\n  `This LinkedIn draft uses worn phrases or a list that make Joshua's posts sound the same every day: \"${style.join('\", \"')}\".`,\n  `Rewrite it without them, no \"Picture a\" example, no labelled takeaway. Say it the plain way Joshua would. Keep the topic, the news item and the facts. ` + (tooLong ? `Cut it to ${MAX_WORDS} words or fewer: keep the one main point and drop the rest.` : `Keep roughly the length.`) + ` Every rule in your instructions still stands.`,\n  `Draft:\\n${JSON.stringify({ topic, news_title, news_url, daily_post: t })}`,\n].join('\\n\\n') : flags.length ? [\n  `This LinkedIn draft states things about Joshua's own experience that he never told us: \"${flags.join('\", \"')}\".`,\n  `Rewrite it so it makes no claim about anything Joshua, \"we\", \"our team\" or \"my team\" did, built, tested, saw or achieved, and nothing about his employer or clients.`,\n  brief.take_text ? `The only personal claims allowed are the ones in his own words: \"${brief.take_text}\"` : 'No personal claims are allowed at all.',\n  `Turn any such story into a clearly hypothetical example (\"Say a team...\"), or drop it. Keep the topic, the news item, the length and everything else that follows the rules.`,\n  style.length ? `Also drop these worn phrases: \"${style.join('\", \"')}\".` : '',\n  `Draft:\\n${JSON.stringify({ topic, news_title, news_url, daily_post: t })}`,\n].filter(Boolean).join('\\n\\n') : '';\n\nreturn [{ json: { topic, news_title, news_url, daily_post: post, words, flags, style, flagged: flags.length > 0 || style.length > 0, attempt: ATTEMPT, email, rewrite_prompt, round: ctx.round || 0 } }];\n"
+   }
+  },
+  {
+   "id": "f4b24be2-5540-4feb-9dc8-985776365b4a",
+   "name": "Log draft",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    2860,
+    80
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "insert",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_posts-table-id>"
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "post_date": "={{ $('Plan the day').first().json.date }}",
+      "weekday": "={{ $('Plan the day').first().json.day }}",
+      "pillar": "={{ $('Prepare brief').first().json.pillar }}",
+      "topic": "={{ $json.topic }}",
+      "news_title": "={{ $json.news_title }}",
+      "news_url": "={{ $json.news_url }}",
+      "take_used": "={{ $('Prepare brief').first().json.take_text }}",
+      "draft": "={{ $json.daily_post }}",
+      "status": "pending"
+     },
+     "schema": [
+      {
+       "id": "post_date",
+       "displayName": "post_date",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "weekday",
+       "displayName": "weekday",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "pillar",
+       "displayName": "pillar",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "topic",
+       "displayName": "topic",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "news_title",
+       "displayName": "news_title",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "news_url",
+       "displayName": "news_url",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "take_used",
+       "displayName": "take_used",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "draft",
+       "displayName": "draft",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "status",
+       "displayName": "status",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "9481f93a-d365-4950-a377-fa488aacf31e",
+   "name": "Find picture",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    3080,
+    80
+   ],
+   "parameters": {
+    "method": "GET",
+    "url": "https://www.googleapis.com/drive/v3/files",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "googleDriveOAuth2Api",
+    "options": {},
+    "sendQuery": true,
+    "queryParameters": {
+     "parameters": [
+      {
+       "name": "q",
+       "value": "'<drive-folder-id: build-pics>' in parents and trashed = false and mimeType contains 'image/'"
+      },
+      {
+       "name": "fields",
+       "value": "files(id,name,mimeType,webViewLink)"
+      },
+      {
+       "name": "orderBy",
+       "value": "createdTime desc"
+      },
+      {
+       "name": "supportsAllDrives",
+       "value": "true"
+      },
+      {
+       "name": "includeItemsFromAllDrives",
+       "value": "true"
+      }
+     ]
+    }
+   },
+   "credentials": {
+    "googleDriveOAuth2Api": {
+     "id": "<credential-id>",
+     "name": "Google Drive account"
+    }
+   },
+   "onError": "continueRegularOutput",
+   "alwaysOutputData": true
+  },
+  {
+   "id": "7eb71094-221b-47f8-9210-1f205de7629a",
+   "name": "Pick picture",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3300,
+    80
+   ],
+   "parameters": {
+    "jsCode": "const plan = $('Plan the day').first().json;\nconst files = ($input.first()?.json?.files || []).filter(f => String(f.mimeType || '').startsWith('image/'));\nconst f = plan.day === 'Friday' ? files[0] : null;\nconst email = $('Clean rewrite').isExecuted ? $('Clean rewrite').first().json.email : $('Clean and check').first().json.email;\nreturn [{ json: { has_picture: !!f, picture_id: f?.id || '', picture_name: f?.name || '', picture_link: f?.webViewLink || '', email, round: 0 } }];\n"
+   }
+  },
+  {
+   "id": "38c46dfa-0fa3-41aa-b61e-f3724708f124",
+   "name": "Got picture?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    3740,
+    80
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "83cab247-869e-4194-a073-1f34ebfb085b",
+       "leftValue": "={{ $json.has_picture }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "35d1b314-24bd-4b6b-9f0f-8871bd5d0c6e",
+   "name": "Ask Josh to approve",
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.1,
+   "position": [
+    3960,
+    200
+   ],
+   "parameters": {
+    "resource": "message",
+    "operation": "sendAndWait",
+    "sendTo": "you@example.com",
+    "subject": "=LinkedIn draft for approval - {{ $('Plan the day').first().json.day }} {{ $('Plan the day').first().json.date }}{{ $json.round ? ' (redraft ' + $json.round + ')' : '' }}",
+    "message": "={{ $json.email }}",
+    "responseType": "customForm",
+    "formFields": {
+     "values": [
+      {
+       "fieldLabel": "Choice",
+       "fieldType": "dropdown",
+       "requiredField": true,
+       "fieldOptions": {
+        "values": [
+         {
+          "option": "Post it"
+         },
+         {
+          "option": "Edit it"
+         },
+         {
+          "option": "Reject"
+         }
+        ]
+       }
+      },
+      {
+       "fieldLabel": "What should change?",
+       "fieldType": "textarea",
+       "requiredField": false,
+       "placeholder": "Only for Edit it. Example: make the hook shorter and drop the last paragraph."
+      }
+     ]
+    },
+    "options": {
+     "messageButtonLabel": "Post, edit or reject",
+     "responseFormTitle": "Today's post",
+     "responseFormButtonLabel": "Send",
+     "limitWaitTime": {
+      "values": {
+       "limitType": "atSpecifiedTime",
+       "maxDateAndTime": "={{ $now.setZone('America/Chicago').set({ hour: 18, minute: 0, second: 0 }) > $now.plus({ hours: 1 }) ? $now.setZone('America/Chicago').set({ hour: 18, minute: 0, second: 0 }).toISO() : $now.plus({ hours: 1 }).toISO() }}"
+      }
+     },
+     "appendAttribution": false
+    }
+   },
+   "webhookId": "1dfa1f22-d01d-4d24-ac96-1e13568981c2",
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "<credential-id>",
+     "name": "Gmail account"
+    }
+   }
+  },
+  {
+   "id": "f22f5957-b327-457f-bf4b-b098b51e932b",
+   "name": "Ask Josh to approve (picture)",
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.1,
+   "position": [
+    3960,
+    -40
+   ],
+   "parameters": {
+    "resource": "message",
+    "operation": "sendAndWait",
+    "sendTo": "you@example.com",
+    "subject": "=LinkedIn draft for approval - {{ $('Plan the day').first().json.day }} {{ $('Plan the day').first().json.date }}{{ $json.round ? ' (redraft ' + $json.round + ')' : '' }}",
+    "message": "={{ $json.email + '\\n\\nPICTURE WAITING: ' + $('Pick picture').first().json.picture_name + '\\n' + $('Pick picture').first().json.picture_link + '\\nOpen it first. Only post it if it shows no client names, emails, keys or employer screens. Text only leaves it in the folder for next time.' }}",
+    "responseType": "customForm",
+    "formFields": {
+     "values": [
+      {
+       "fieldLabel": "Choice",
+       "fieldType": "dropdown",
+       "requiredField": true,
+       "fieldOptions": {
+        "values": [
+         {
+          "option": "Post with picture"
+         },
+         {
+          "option": "Post text only"
+         },
+         {
+          "option": "Edit it"
+         },
+         {
+          "option": "Reject"
+         }
+        ]
+       }
+      },
+      {
+       "fieldLabel": "What should change?",
+       "fieldType": "textarea",
+       "requiredField": false,
+       "placeholder": "Only for Edit it. Example: make the hook shorter and drop the last paragraph."
+      }
+     ]
+    },
+    "options": {
+     "messageButtonLabel": "Post, edit or reject",
+     "responseFormTitle": "Friday post",
+     "responseFormButtonLabel": "Send",
+     "limitWaitTime": {
+      "values": {
+       "limitType": "atSpecifiedTime",
+       "maxDateAndTime": "={{ $now.setZone('America/Chicago').set({ hour: 18, minute: 0, second: 0 }) > $now.plus({ hours: 1 }) ? $now.setZone('America/Chicago').set({ hour: 18, minute: 0, second: 0 }).toISO() : $now.plus({ hours: 1 }).toISO() }}"
+      }
+     },
+     "appendAttribution": false
+    }
+   },
+   "webhookId": "ad62d2cc-4448-4fa1-bf6c-f07ed6490103",
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "<credential-id>",
+     "name": "Gmail account"
+    }
+   }
+  },
+  {
+   "id": "a8be27f5-add8-43d7-b5c3-29af65de6936",
+   "name": "Read approval",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    4180,
+    80
+   ],
+   "parameters": {
+    "jsCode": "const j = $input.first().json || {};\nconst d = j.data && typeof j.data === 'object' ? j.data : j;\nconst choice = String(d['Choice'] || '').trim().toLowerCase();\nconst note = String(d[\"What should change?\"] || '').trim();\nlet edit = choice === 'edit it';\nlet approved = ['post it', 'post with picture', 'post text only'].includes(choice);\n// Words in the box mean he wants changes, so never post over them.\nif (approved && note) { approved = false; edit = true; }\nconst with_picture = approved && choice === 'post with picture';\nconst rejected = choice === 'reject';\nreturn [{ json: { approved, with_picture, rejected, edit, note } }];\n"
+   }
+  },
+  {
+   "id": "eba7a68e-c739-43fc-a2e9-8686ac532d38",
+   "name": "Approved?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    4620,
+    80
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "fcc5c294-2418-47d3-afee-e40143b128a0",
+       "leftValue": "={{ $json.approved === true }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "9f397f69-2a6e-4cbd-962f-2587f7813595",
+   "name": "Pick Post Time",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    4840,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// Picks a random post time inside the 8:00-9:45 Chicago window.\n// $now uses the workflow timezone (America/Chicago).\nconst now = $now;\nconst start = now.set({ hour: 8, minute: 0, second: 0, millisecond: 0 });\nconst end = now.set({ hour: 9, minute: 45, second: 0, millisecond: 0 });\n\nconst rand = (a, b) => a + Math.random() * (b - a);\nlet postAt;\n\nif (now < start) {\n  // Approved early: anywhere in the window\n  postAt = start.plus({ milliseconds: rand(0, end.diff(start).as('milliseconds')) });\n} else if (now < end.minus({ minutes: 10 })) {\n  // Approved inside the window: somewhere between 3 minutes from now and 9:45\n  const from = now.plus({ minutes: 3 });\n  postAt = from.plus({ milliseconds: rand(0, end.diff(from).as('milliseconds')) });\n} else {\n  // Approved late: short random delay so it still looks hand-posted\n  postAt = now.plus({ minutes: rand(3, 12) });\n}\n\nreturn [{ json: { postAt: postAt.toISO(), postAtLocal: postAt.toFormat('h:mm a'), with_picture: $input.first().json.with_picture === true } }];\n"
+   }
+  },
+  {
+   "id": "98dfce51-5f20-493d-9b41-bf28dc074b94",
+   "name": "Wait For Post Time",
+   "type": "n8n-nodes-base.wait",
+   "typeVersion": 1.1,
+   "position": [
+    5060,
+    0
+   ],
+   "parameters": {
+    "resume": "specificTime",
+    "dateTime": "={{ $json.postAt }}"
+   },
+   "webhookId": "00725f5e-5e34-4658-aaf3-e97f66ca61c2"
+  },
+  {
+   "id": "7618ae7f-f06e-486b-b155-c93d1284051c",
+   "name": "Picture post?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    5280,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "684f22de-04d6-4966-a5ca-e80d845cdc94",
+       "leftValue": "={{ $('Pick Post Time').first().json.with_picture === true }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "97e5a405-e125-41d5-9197-575d52f676f1",
+   "name": "Download picture",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    5500,
+    -120
+   ],
+   "parameters": {
+    "method": "GET",
+    "url": "=https://www.googleapis.com/drive/v3/files/{{ $('Pick picture').first().json.picture_id }}?alt=media&supportsAllDrives=true",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "googleDriveOAuth2Api",
+    "options": {
+     "response": {
+      "response": {
+       "responseFormat": "file",
+       "outputPropertyName": "data"
+      }
+     }
+    }
+   },
+   "credentials": {
+    "googleDriveOAuth2Api": {
+     "id": "<credential-id>",
+     "name": "Google Drive account"
+    }
+   },
+   "onError": "continueErrorOutput"
+  },
+  {
+   "id": "43587c8f-94e2-4565-aff6-4603c9a14a2a",
+   "name": "Post to LinkedIn (picture)",
+   "type": "n8n-nodes-base.linkedIn",
+   "typeVersion": 1,
+   "position": [
+    5720,
+    -120
+   ],
+   "parameters": {
+    "person": "<linkedin-person-id>",
+    "text": "={{ $('Load final draft').first().json.draft }}",
+    "shareMediaCategory": "IMAGE",
+    "binaryPropertyName": "data",
+    "additionalFields": {
+     "visibility": "PUBLIC"
+    }
+   },
+   "credentials": {
+    "linkedInOAuth2Api": {
+     "id": "<credential-id>",
+     "name": "LinkedIn account"
+    }
+   },
+   "onError": "continueErrorOutput"
+  },
+  {
+   "id": "2a14b9f6-a3d2-4130-84df-b3db44ccebff",
+   "name": "Post to LinkedIn",
+   "type": "n8n-nodes-base.linkedIn",
+   "typeVersion": 1,
+   "position": [
+    5720,
+    80
+   ],
+   "parameters": {
+    "person": "<linkedin-person-id>",
+    "text": "={{ $('Load final draft').first().json.draft }}",
+    "additionalFields": {
+     "visibility": "PUBLIC"
+    }
+   },
+   "credentials": {
+    "linkedInOAuth2Api": {
+     "id": "<credential-id>",
+     "name": "LinkedIn account"
+    }
+   }
+  },
+  {
+   "id": "296aaa82-2fb3-4f57-b659-d43dddc1cf9e",
+   "name": "Move picture to used",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    5940,
+    -240
+   ],
+   "parameters": {
+    "method": "PATCH",
+    "url": "=https://www.googleapis.com/drive/v3/files/{{ $('Pick picture').first().json.picture_id }}",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "googleDriveOAuth2Api",
+    "options": {},
+    "sendQuery": true,
+    "queryParameters": {
+     "parameters": [
+      {
+       "name": "addParents",
+       "value": "<drive-folder-id: build-pics/_used>"
+      },
+      {
+       "name": "removeParents",
+       "value": "<drive-folder-id: build-pics>"
+      },
+      {
+       "name": "supportsAllDrives",
+       "value": "true"
+      }
+     ]
+    }
+   },
+   "credentials": {
+    "googleDriveOAuth2Api": {
+     "id": "<credential-id>",
+     "name": "Google Drive account"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "0f42a5c6-59d3-40aa-a6dc-e88aab2e5d40",
+   "name": "Mark posted",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    5940,
+    0
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "update",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_posts-table-id>"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "id",
+       "condition": "eq",
+       "keyValue": "={{ $('Log draft').first().json.id }}"
+      }
+     ]
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "status": "posted"
+     },
+     "schema": [
+      {
+       "id": "status",
+       "displayName": "status",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "aec98f6b-b0d1-4998-b02f-261a8724173f",
+   "name": "Mark topic used",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    6160,
+    -80
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "update",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_topics-table-id>"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "id",
+       "condition": "eq",
+       "keyValue": "={{ $('Prepare brief').first().json.topic_row_id || '0' }}"
+      }
+     ]
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "last_used": "={{ $('Plan the day').first().json.date }}"
+     },
+     "schema": [
+      {
+       "id": "last_used",
+       "displayName": "last_used",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "7120f3ae-a71e-4a57-ac4f-b57fa127d0d4",
+   "name": "Mark take used",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    6160,
+    80
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "update",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_takes-table-id>"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "id",
+       "condition": "eq",
+       "keyValue": "={{ $('Prepare brief').first().json.take_id || '0' }}"
+      }
+     ]
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "used_on": "={{ $('Plan the day').first().json.date }}"
+     },
+     "schema": [
+      {
+       "id": "used_on",
+       "displayName": "used_on",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "bdafbe85-503b-4dcd-926d-917e7a5acd23",
+   "name": "Mark rejected or skipped",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    4840,
+    200
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "update",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_posts-table-id>"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "id",
+       "condition": "eq",
+       "keyValue": "={{ $('Log draft').first().json.id }}"
+      }
+     ]
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "status": "={{ $json.rejected ? 'rejected' : 'skipped (no reply)' }}"
+     },
+     "schema": [
+      {
+       "id": "status",
+       "displayName": "status",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "fe66486f-1e5a-4cd9-881f-d2c04189b276",
+   "name": "Draft to send",
+   "type": "n8n-nodes-base.noOp",
+   "typeVersion": 1,
+   "position": [
+    3520,
+    80
+   ],
+   "parameters": {}
+  },
+  {
+   "id": "0e11abe9-9f1c-4d5c-bc4e-9c4d63889b75",
+   "name": "Edit?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    4400,
+    80
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "a95fe9e2-a9df-4025-ab9b-7b5a81dd9244",
+       "leftValue": "={{ $json.edit === true }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "e4b894d7-0ad0-437f-b66f-eec7c473a187",
+   "name": "Note given?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    4400,
+    -140
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "154c4eb4-e562-4ad5-a3e6-dffc4099e7c7",
+       "leftValue": "={{ $json.note.length > 0 }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "8f5280cf-19f6-4520-b0f0-776a34a1b2df",
+   "name": "Ask again",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    4180,
+    -140
+   ],
+   "parameters": {
+    "jsCode": "// He picked Edit but typed nothing, so resend the same draft with a reminder.\nconst NUDGE = 'You picked Edit it but the box was empty, so nothing changed. Here is the same draft again.\\n\\n';\nconst prev = $('Draft to send').last().json;\nreturn [{ json: { ...prev, email: NUDGE + String(prev.email).replace(NUDGE, '') } }];\n"
+   }
+  },
+  {
+   "id": "392a9c54-9bb5-4eb7-a533-3bdf50f3d97d",
+   "name": "Load draft to edit",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    4400,
+    -300
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_posts-table-id>"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "id",
+       "condition": "eq",
+       "keyValue": "={{ $('Log draft').first().json.id }}"
+      }
+     ]
+    },
+    "returnAll": true
+   }
+  },
+  {
+   "id": "38b91c10-d20f-40e5-9a5f-b80a80f742af",
+   "name": "Prepare redraft",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    4180,
+    -300
+   ],
+   "parameters": {
+    "jsCode": "// Builds the redraft request from the saved draft and Joshua's edit note.\nconst row = $input.first().json;\nconst note = $('Read approval').last().json.note;\nconst brief = $('Prepare brief').first().json;\nconst old = String(row.edit_notes || '');\nconst round = (old.match(/^Round \\d+:/gm) || []).length + 1;\nconst all_notes = (old ? old + '\\n' : '') + `Round ${round}: ${note}`;\n// The article link is added back in code after the redraft.\nconst current_body = String(row.draft || '').replace(/\\n*Read the article: \\S+\\s*$/, '').trim();\nconst prompt = [\n  'Joshua read this LinkedIn draft and wants changes.',\n  `CURRENT DRAFT:\\n<<<\\n${current_body}\\n>>>`,\n  `CURRENT DETAILS: topic: ${row.topic || 'none'} | news_title: ${row.news_title || 'none'} | news_url: ${row.news_url || 'none'}`,\n  `JOSHUA'S EDIT NOTE (his own words):\\n\"${note}\"`,\n  old ? `His earlier notes on this post, which still apply:\\n${old}` : '',\n  `HOW TO APPLY THE NOTE:\n1. Do exactly what the note asks.\n2. If it asks for a small change, change only that and keep every other line word for word. Do not improve lines he did not mention.\n3. If it asks for a rewrite or a new topic, write a fresh post on what he asked for.\n4. Keep about the same length unless he asks otherwise.\n5. Anything he says about himself in the note is true. Treat it as JOSHUA'S TAKE under hard rules 1 and 8. Add nothing else about him.\n6. Every other hard rule still stands. Facts about news come only from his note or the NEWS list below.\n7. Return the same topic, news_title and news_url unless the post now uses something different. If it no longer uses a news item, return them empty.`,\n  `ORIGINAL BRIEF (background and the NEWS list. His note overrides its task and format):\\n${brief.brief}`,\n].filter(Boolean).join('\\n\\n');\nreturn [{ json: { prompt, note, all_notes, round, current_body, topic: row.topic || '', news_title: row.news_title || '', news_url: row.news_url || '' } }];\n"
+   }
+  },
+  {
+   "id": "485f2146-66b8-40ec-a90c-6c3f952461e9",
+   "name": "Write redraft",
+   "type": "@n8n/n8n-nodes-langchain.anthropic",
+   "typeVersion": 1,
+   "position": [
+    3960,
+    -300
+   ],
+   "parameters": {
+    "resource": "text",
+    "operation": "message",
+    "modelId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "claude-opus-5-5"
+    },
+    "messages": {
+     "values": [
+      {
+       "role": "user",
+       "content": "={{ $json.prompt }}"
+      }
+     ]
+    },
+    "simplify": true,
+    "options": {
+     "system": "You write LinkedIn posts for Joshua Mott. Joshua works in AI and has a background in logistics. His audience is mostly logistics and operations people: smart, busy, and mostly new to AI.\n\nGoals: 1) teach real, useful things, no fluff; 2) grow the audience; 3) build Joshua's name as someone who explains AI in logistics clearly.\n\nHARD RULES. Breaking any of these makes the post unusable.\n1. Never invent experience. Do not write anything Joshua did, built, tested, saw, measured or learned, and nothing about his employer, team, colleagues, clients or results. No \"we tested\", \"last quarter we\", \"at my company\", \"a client of mine\", \"in my experience\". The only exception: things stated in JOSHUA'S TAKE or JOSHUA'S BUILD NOTE, when one is given.\n2. Any example must be clearly hypothetical (\"Say a broker gets 200 emails a day...\"). Never present an example as something that happened. Many posts need no example at all.\n3. News facts come only from the NEWS list. Use only what the headline and summary say. Name the source in plain words (\"TechCrunch reported...\"). Do not invent numbers, quotes, names or details. If a summary is thin, keep the claim small. Do not put any links or URLs in the post. The article link is added at the bottom automatically.\n4. No made-up statistics anywhere. If a number is not in NEWS, do not use one.\n5. Only refer back to an earlier post if it appears under THIS WEEK'S POSTS, and describe it accurately. Otherwise do not mention earlier posts.\n6. Do not repeat a topic, angle or opening line listed under RECENT POSTS. A theme can come back (AI agents in operations is Joshua's strongest), but only with a new angle, a new example and a new opening.\n7. Plain text only. No markdown, no asterisks, no bullet symbols, no hashtags, no emojis. Never use em dashes or en dashes: use a comma or a full stop. Lists depend on the content. Use a numbered list, written as \"1.\" on new lines, only when the points really are steps in order or separate items the reader will work through. Otherwise write paragraphs. Never use a list just to give the post structure. No bullet symbols.\n8. With JOSHUA'S BUILD NOTE or JOSHUA'S TAKE, keep his words and how he felt. You may fix grammar, trim and reorder. Do not swap his phrases for smarter-sounding ones, do not cut his feelings (\"I'm thrilled!\"), and do not add a lesson, conclusion or claim he did not make, including in the first line. Build the hook from his own words.\n9. Do not sound like the last two weeks. RECENT POSTS show the openings already used. Never use these worn phrases: \"Picture a\", \"Imagine a\", \"The way I see it\", \"Here is why\", \"Here's the thing\", \"One-line takeaway\", \"Takeaway:\", \"on the floor\", \"this week\" as a closing push, \"What do you think?\". Do not name a source with \"X reported that\" every time; work the source in naturally.\n\nVoice: write the way Joshua talks when he's explaining something to a sharp colleague over coffee. Plain English, short sentences, mostly short paragraphs with the odd one-line paragraph for emphasis. Talk to the reader as a smart adult who is new to AI, never down to them.\n- Conversational, not polished. No clever copywriting lines or neat metaphors (for example \"quietly fall into two camps\", \"a web of choices\"). If a line sounds like an ad or a magazine, say it plainer.\n- Explain step by step, the way he would walk someone through it: \"this happens, then this, then it lands here.\"\n- Use his kind of phrasing only where it fits naturally, one per post at most: \"basically\", \"if that makes sense\", \"up and running\", \"knock it out\", \"to be honest\".\n- State views as his: \"I think\", \"honestly\", \"my view is\". Vary it. A view on an idea is fine. It is not a claim about his life, so hard rule 1 still applies.\n- Down to earth and honest. It's fine to say AI has limits or that people are still figuring it out.\n- One exclamation mark is allowed where he'd genuinely be excited. Never more than one.\n- No slang (lol, ya), no swearing, no emojis, no hype words (game-changer, revolutionary, unlock, leverage, supercharge, transform).\n\nWHAT MAKES A POST TRAVEL. Joshua's own numbers show his best posts did these things. Do all of them.\n1. The hook. Most people only see the first two lines before \"see more\", so those lines must earn the click. Open with tension: a bold claim, a common belief you are about to knock down, or a concrete scene from a working day. First line under 100 characters. Never open with a definition (\"X is how...\"), a soft question (\"Why do some...\") or \"Most people think\".\n2. A point of view. Say plainly what is true about the idea and why. Confident, not hedged, no \"it depends\" endings. This is a view on ideas, not a claim about Joshua's life, so rule 1 still stands. Two exceptions: a debate post takes no side, and with JOSHUA'S TAKE or JOSHUA'S BUILD NOTE his view stays exactly as he wrote it.\n3. Logistics where it fits. Most readers work in logistics and operations, so a real ops angle helps when the topic has one. Do not force it: no dispatcher or TMS example bolted onto a story that has nothing to do with freight. At most one hypothetical example per post.\n4. The ending. Vary it. Sometimes a specific question the reader can answer from their own work, sometimes a plain closing line, sometimes just stop when the point is made. Never a labelled takeaway, never just \"What do you think?\"\n5. Sound like a person, not a template. No neat setup, numbered breakdown and summary line. A post can be loose, a little opinionated and end without a bow on it.\n\nHere is a post Joshua wrote himself. Use it for voice only. Do not copy its topic, its lines or its structure.\n<<<\n\"AI will take your job.\"\n\nCatchy hook for a LinkedIn post or YouTube video.\n\nMost of us have heard some variation of it over the past 6 to 12 months.\n\n\"Programmers are obsolete.\"\n\n\"Copywriting is dead.\"\n\n\"Accounting departments won't be needed.\"\n\nAI is powerful, and the possibilities are probably limitless.\n\nBut as the hype begins to calm, one thing is becoming apparent:\n\nAI isn't a human.\n\nAI can code, but a human needs to ensure the code actually solves the right problem.\n\nAI can write copy, but a human needs to verify the tone, voice, and message.\n\nAI can enter data, but a human needs to confirm the data is correct.\n\nAI can analyze information, but a human still needs to determine what the results actually mean.\n\nThis is why I think we're moving toward an age where AI expands an individual's daily bandwidth rather than simply replacing them.\n\nOne person will be able to accomplish what previously required several.\n\nAI isn't necessarily eliminating the human from the equation.\n\nIt's changing how much one human can accomplish.\n\nAI is a multiplier.\n\nThe question isn't necessarily:\n\n\"Will AI take my job?\"\n\nIt may be:\n\n\"What will I be able to accomplish with AI that I couldn't accomplish before?\"\n\nHow do you think AI will change your day-to-day work?\n>>>\n\nHere is how Joshua sounds in his own words, unedited. Use it for voice only. Do not copy its topic or its lines.\n<<<\nAs I build, explore, and ship more with Claude Code, I am finding more and more things in my personal life that I can automate or improve. A good example is that, in the past, I've always tracked my workouts with a basic Excel sheet. There hasn't been an app I found that I liked or I wanted to pay for, and I hate using Excel, but it was the quickest way to track my progress. Then, Tuesday night, it struck me that I could probably build my own customizable app as a Claude artifact, so I gave it a try. It took Claude less than 20 minutes, and I had my own personalized workout tracker, exactly how I wanted it. I'm thrilled!\n>>>\n\nReturn JSON only, in this shape:\n{\"topic\":\"short label for today's topic\",\"news_title\":\"exact title of the news item used, or empty\",\"news_url\":\"its url, or empty\",\"daily_post\":\"the post text\"}",
+     "maxTokens": 4000
+    }
+   },
+   "credentials": {
+    "anthropicApi": {
+     "id": "<credential-id>",
+     "name": "Anthropic account"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "19718eef-aab3-4cbc-b782-a211ac44a3e8",
+   "name": "Clean redraft",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3740,
+    -300
+   ],
+   "parameters": {
+    "jsCode": "// Strips dashes, curly quotes and markdown, then checks for invented personal claims.\nconst ATTEMPT = 2;\nconst REDRAFT = true;\nconst plan = $('Plan the day').first().json;\nconst brief = $('Prepare brief').first().json;\nconst ctx = REDRAFT ? $('Prepare redraft').last().json : {};\nconst _j = $input.first().json || {};\n// GPT puts the text in output[0].content[0].text, Claude in content[0].text (v9 reads both).\nconst _c = _j.output?.[0]?.content?.[0]?.text ?? (Array.isArray(_j.content) ? _j.content.find(b => b && b.type === 'text')?.text : _j.content) ?? _j.text ?? _j.message?.content;\n// Claude can wrap the JSON in a sentence, so keep only the {...} part.\nconst raw = typeof _c === 'string' && _c.indexOf('{') >= 0 ? _c.slice(_c.indexOf('{'), _c.lastIndexOf('}') + 1) : _c;\nlet o = raw;\nif (typeof raw === 'string') {\n  try { o = JSON.parse(raw.replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '')); }\n  catch (e) { o = { daily_post: raw }; }\n}\no = o || {};\n\nlet t = String(o.daily_post || '')\n  .replace(/(\\d)\\s*[–—]\\s*(\\d)/g, '$1-$2')\n  .replace(/\\s*[–—―]\\s*/g, ', ')\n  .replace(/[‘’‛]/g, \"'\").replace(/[“”‟]/g, '\"')\n  .replace(/[‐‑‒]/g, '-').replace(/ /g, ' ').replace(/…/g, '...')\n  .replace(/,\\s*([,.!?;:])/g, '$1').replace(/^\\s*,\\s*/gm, '')\n  .replace(/\\*\\*|__/g, '').replace(/^#+\\s*/gm, '')\n  .replace(/(^|\\s)#[A-Za-z]\\w*/g, '$1')\n  .replace(/[ \\t]+$/gm, '').replace(/\\n{3,}/g, '\\n\\n').trim();\n\n// If a redraft comes back empty or the AI call fails, keep the last version so the day isn't lost.\nconst failed = REDRAFT && !t;\nif (failed) {\n  t = ctx.current_body;\n  o = { topic: ctx.topic, news_title: ctx.news_title, news_url: ctx.news_url };\n}\n\n// Joshua's own words may hold personal claims: his take, plus any edit notes.\nconst take = [brief.take_text, ctx.all_notes].filter(Boolean).join(' ').toLowerCase();\nconst checks = [\n  /\\b(?:we|i|our team|my team)\\s+(?:recently\\s+|just\\s+|also\\s+|actually\\s+)?(?:tested|built|deployed|rolled out|implemented|piloted|launched|ran|trialed|trialled|measured|cut|saved|reduced|automated|shipped|replaced)\\b/i,\n  /\\b(?:last|this past)\\s+(?:quarter|month|year|week)\\b[^.\\n]{0,80}\\b(?:we|our)\\b/i,\n  /\\b(?:a client of mine|one of my clients|our clients?|our customers?|at my (?:company|job|work)|where i work|my employer|my company)\\b/i,\n  /\\bin my experience\\b|\\bwhen i worked\\b/i,\n  /\\bmy-employer\\b/i,  // your employer's name goes here\n];\n// A build log is Joshua's own week, so \"I built\" is allowed there. The other checks still run.\nif (brief.pillar === 'build') checks.shift();\nconst flags = [];\nfor (const re of checks) {\n  const m = t.match(re);\n  // The employer's name is never allowed, even if it came from his own words.\n  if (m && (/my-employer/i.test(m[0]) || !(take && take.includes(m[0].toLowerCase())))) flags.push(m[0]);\n}\n\n// v9: worn phrases and lists that made posts sound the same. First draft only, never on his edits,\n// and never when the words came from Joshua himself.\nconst STOCK = [/\\bpicture an?\\s/i, /\\bimagine an?\\s/i, /\\bthe way i see it\\b/i, /\\bone-line takeaway\\b/i,\n  /^\\s*takeaway:/im, /\\bhere'?s the thing\\b/i, /\\bhere is why\\b/i];\nconst style = (ATTEMPT === 1 && !REDRAFT) ? STOCK.map(re => t.match(re))\n  .filter(m => m && !(take && take.includes(m[0].trim().toLowerCase()))).map(m => m[0].trim()) : [];\n\nconst words = t ? t.split(/\\s+/).length : 0;\n// v9.3: hard cap. A first draft over 160 words goes back for one rewrite.\nconst MAX_WORDS = 160;\nconst tooLong = ATTEMPT === 1 && !REDRAFT && words > MAX_WORDS;\nif (tooLong) style.push(`${words} words, over the ${MAX_WORDS} cap`);\n// The model sometimes retypes links. Use the exact feed link so the post log stays accurate.\nconst norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();\nconst feedNews = brief.news || [];\nconst match = feedNews.find(n => n.url === o.news_url)\n  || feedNews.find(n => o.news_title && norm(n.title) === norm(o.news_title))\n  || feedNews.find(n => o.news_title && norm(n.title).slice(0, 40) === norm(o.news_title).slice(0, 40));\nconst news_title = match ? match.title : (o.news_title || '');\nconst news_url = match ? match.url : (o.news_url || '');\nconst topic = o.topic || brief.topic || '';\n// Any post built on an article ends with its link, so readers can go read it.\n// Only exact feed links (or the link saved with Joshua's take), never one the model typed.\nconst article_url = match ? match.url : (brief.take_url || '');\nconst post = article_url && !t.includes(article_url) ? `${t}\n\nRead the article: ${article_url}` : t;\n\nconst email = [\n  REDRAFT ? `Redraft ${ctx.round}. Your change: \"${ctx.note}\"` : '',\n  failed ? 'THE REDRAFT FAILED, so this is the previous version. Pick Edit it to try again.' : '',\n  `${plan.day} post (${plan.format}, ${words} words)`,\n  `Type: ${brief.pillar || plan.pillar}${topic ? ' | Topic: ' + topic : ''}`,\n  news_title ? `News used: ${news_title}\\n${news_url}` : 'News used: none',\n  brief.take_text ? `Your words it was built from:\\n\"${brief.take_text}\"` : '',\n  flags.length && ATTEMPT > 1 ? `CHECK THIS: the draft still reads like a personal claim: \"${flags.join('\", \"')}\". Only post it if it is true.` : '',\n  '------------------------------',\n  post,\n  '------------------------------',\n  'Hit the button and pick one. Post it: goes to LinkedIn at a random time between 8:00 and 9:45am Chicago (a few minutes after you choose, if that is later). Edit it: type what to change and a new draft comes back by email. Reject: nothing posts today. No answer by 6pm Chicago time and the day is skipped.',\n].filter(Boolean).join('\\n\\n');\n\nconst rewrite_prompt = style.length && !flags.length ? [\n  `This LinkedIn draft uses worn phrases or a list that make Joshua's posts sound the same every day: \"${style.join('\", \"')}\".`,\n  `Rewrite it without them, no \"Picture a\" example, no labelled takeaway. Say it the plain way Joshua would. Keep the topic, the news item and the facts. ` + (tooLong ? `Cut it to ${MAX_WORDS} words or fewer: keep the one main point and drop the rest.` : `Keep roughly the length.`) + ` Every rule in your instructions still stands.`,\n  `Draft:\\n${JSON.stringify({ topic, news_title, news_url, daily_post: t })}`,\n].join('\\n\\n') : flags.length ? [\n  `This LinkedIn draft states things about Joshua's own experience that he never told us: \"${flags.join('\", \"')}\".`,\n  `Rewrite it so it makes no claim about anything Joshua, \"we\", \"our team\" or \"my team\" did, built, tested, saw or achieved, and nothing about his employer or clients.`,\n  brief.take_text ? `The only personal claims allowed are the ones in his own words: \"${brief.take_text}\"` : 'No personal claims are allowed at all.',\n  `Turn any such story into a clearly hypothetical example (\"Say a team...\"), or drop it. Keep the topic, the news item, the length and everything else that follows the rules.`,\n  style.length ? `Also drop these worn phrases: \"${style.join('\", \"')}\".` : '',\n  `Draft:\\n${JSON.stringify({ topic, news_title, news_url, daily_post: t })}`,\n].filter(Boolean).join('\\n\\n') : '';\n\nreturn [{ json: { topic, news_title, news_url, daily_post: post, words, flags, style, flagged: flags.length > 0 || style.length > 0, attempt: ATTEMPT, email, rewrite_prompt, round: ctx.round || 0 } }];\n"
+   }
+  },
+  {
+   "id": "66bcb5a9-4893-41dd-ba4b-03aa9b0ac10b",
+   "name": "Save redraft",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    3520,
+    -300
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "update",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_posts-table-id>"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "id",
+       "condition": "eq",
+       "keyValue": "={{ $('Log draft').first().json.id }}"
+      }
+     ]
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "topic": "={{ $json.topic }}",
+      "news_title": "={{ $json.news_title }}",
+      "news_url": "={{ $json.news_url }}",
+      "draft": "={{ $json.daily_post }}",
+      "edit_notes": "={{ $('Prepare redraft').last().json.all_notes }}"
+     },
+     "schema": [
+      {
+       "id": "topic",
+       "displayName": "topic",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "news_title",
+       "displayName": "news_title",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "news_url",
+       "displayName": "news_url",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "draft",
+       "displayName": "draft",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "edit_notes",
+       "displayName": "edit_notes",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "6c3e71ef-a9e2-41c5-bf3c-4766a824f8c3",
+   "name": "Redraft ready",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3520,
+    -140
+   ],
+   "parameters": {
+    "jsCode": "const c = $('Clean redraft').last().json;\nreturn [{ json: { ...$('Pick picture').first().json, email: c.email, round: c.round } }];\n"
+   }
+  },
+  {
+   "id": "80cc6a0d-7588-49a2-b8f1-58fb790d7cfd",
+   "name": "Load final draft",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    5170,
+    160
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_posts-table-id>"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "id",
+       "condition": "eq",
+       "keyValue": "={{ $('Log draft').first().json.id }}"
+      }
+     ]
+    },
+    "returnAll": true
+   }
+  },
+  {
+   "id": "ed9fb7fe-94b6-4532-af56-e68d9a8493a8",
+   "name": "Wednesdays 9am",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    520
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "0 9 * * 3"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "d948cfc4-14f0-413e-8aa6-05dc4bfcbe3d",
+   "name": "Feed list (take)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    600
+   ],
+   "parameters": {
+    "jsCode": "// News feeds read on every run. Add or remove lines here.\nconst feeds = [\n  'https://techcrunch.com/category/artificial-intelligence/feed/',\n  'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml',\n  'https://www.technologyreview.com/topic/artificial-intelligence/feed',\n  'https://openai.com/news/rss.xml',\n  'https://blog.google/technology/ai/rss/',\n  'https://www.freightwaves.com/news/feed',\n  'https://www.supplychaindive.com/feeds/news/',\n  'https://www.dcvelocity.com/rss/',\n];\nreturn feeds.map(url => ({ json: { url } }));\n"
+   }
+  },
+  {
+   "id": "25f75494-3538-46c5-941e-f15fbcb85a14",
+   "name": "Read feeds (take)",
+   "type": "n8n-nodes-base.rssFeedRead",
+   "typeVersion": 1.2,
+   "position": [
+    440,
+    600
+   ],
+   "parameters": {
+    "url": "={{ $json.url }}",
+    "options": {}
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "a69fbea1-5c2c-4b5f-97e9-16bd65d9cc37",
+   "name": "Pick news for take",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    600
+   ],
+   "parameters": {
+    "jsCode": "const SOURCES = [\n  [/techcrunch\\.com/i, 'TechCrunch', 'AI'],\n  [/theverge\\.com/i, 'The Verge', 'AI'],\n  [/technologyreview\\.com/i, 'MIT Technology Review', 'AI'],\n  [/openai\\.com/i, 'OpenAI', 'AI'],\n  [/blog\\.google/i, 'Google', 'AI'],\n  [/freightwaves\\.com/i, 'FreightWaves', 'Logistics'],\n  [/supplychaindive\\.com/i, 'Supply Chain Dive', 'Logistics'],\n  [/dcvelocity\\.com/i, 'DC Velocity', 'Logistics'],\n];\nfunction readNews(nodeName, days, skipUrls) {\n  const cutoff = Date.now() - days * 24 * 3600 * 1000;\n  const seen = new Set();\n  const out = [];\n  for (const it of $(nodeName).all()) {\n    const j = it.json || {};\n    if (!j.link || !j.title) continue;\n    const t = Date.parse(j.isoDate || j.pubDate || '');\n    if (!t || t < cutoff || seen.has(j.link) || skipUrls.has(j.link)) continue;\n    seen.add(j.link);\n    const src = SOURCES.find(s => s[0].test(j.link)) || [null, 'News', 'AI'];\n    out.push({\n      title: String(j.title).replace(/\\s+/g, ' ').trim(),\n      url: j.link, source: src[1], kind: src[2], t,\n      snippet: String(j.contentSnippet || j.content || '').replace(/\\s+/g, ' ').trim().slice(0, 240),\n    });\n  }\n  out.sort((a, b) => b.t - a.t);\n  return out.filter(n => n.kind === 'AI').slice(0, 20)\n    .concat(out.filter(n => n.kind === 'Logistics').slice(0, 8));\n}\nfunction newsText(list) {\n  if (!list.length) return '';\n  return list.map((n, i) => {\n    const d = DateTime.fromMillis(n.t).setZone('America/Chicago').toFormat('LLL d');\n    return `${i + 1}. [${n.kind}] ${n.title} (${n.source}, ${d}) ${n.url}` + (n.snippet ? `\\n   ${n.snippet}` : '');\n  }).join('\\n');\n}\n\nconst news = readNews('Read feeds (take)', 5, new Set());\nreturn [{ json: {\n  news_text: news.length ? `NEWS (last 5 days, newest first):\\n${newsText(news)}` : '',\n  for_date: $now.setZone('America/Chicago').plus({ days: 1 }).toISODate(),\n} }];\n"
+   }
+  },
+  {
+   "id": "6809d31c-c91e-4b56-905a-fff7cb01755a",
+   "name": "Choose the trend",
+   "type": "@n8n/n8n-nodes-langchain.anthropic",
+   "typeVersion": 1,
+   "position": [
+    880,
+    600
+   ],
+   "parameters": {
+    "resource": "text",
+    "operation": "message",
+    "modelId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "claude-opus-5-5"
+    },
+    "messages": {
+     "values": [
+      {
+       "role": "user",
+       "content": "={{ $json.news_text }}"
+      }
+     ]
+    },
+    "simplify": true,
+    "options": {
+     "system": "You help Joshua, who posts about AI for logistics and operations people, pick one trend to give his opinion on.\n\nFrom the NEWS list, choose the single AI story or trend that his audience would most want an opinion on: something with real consequences for work, that reasonable people could disagree about. Use only facts from the headline and summary. Plain English. Never use em dashes or en dashes.\n\nReturn JSON only:\n{\"trend\":\"short name, under 10 words\",\"summary\":\"two plain sentences on what happened, facts from the list only\",\"source\":\"source name\",\"url\":\"its url\",\"question\":\"one direct question asking for Joshua's opinion, under 25 words\"}",
+     "maxTokens": 4000
+    }
+   },
+   "credentials": {
+    "anthropicApi": {
+     "id": "<credential-id>",
+     "name": "Anthropic account"
+    }
+   }
+  },
+  {
+   "id": "2034ec0c-eaa1-4090-a999-672c2a0de4fa",
+   "name": "Read trend",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    600
+   ],
+   "parameters": {
+    "jsCode": "const _j = $input.first().json || {};\n// GPT puts the text in output[0].content[0].text, Claude in content[0].text (v9 reads both).\nconst _c = _j.output?.[0]?.content?.[0]?.text ?? (Array.isArray(_j.content) ? _j.content.find(b => b && b.type === 'text')?.text : _j.content) ?? _j.text ?? _j.message?.content;\n// Claude can wrap the JSON in a sentence, so keep only the {...} part.\nconst raw = typeof _c === 'string' && _c.indexOf('{') >= 0 ? _c.slice(_c.indexOf('{'), _c.lastIndexOf('}') + 1) : _c;\nlet o = raw;\nif (typeof raw === 'string') { try { o = JSON.parse(raw.replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '')); } catch (e) { o = {}; } }\no = o || {};\nconst fix = s => String(s || '').replace(/\\s*[–—]\\s*/g, ', ').replace(/[‘’]/g, \"'\").replace(/[“”]/g, '\"').trim();\nconst trend = fix(o.trend), summary = fix(o.summary), source = fix(o.source), url = String(o.url || '');\nconst question = fix(o.question) || `What's your take on ${trend}?`;\nconst message = [\n  `This week's trend: ${trend}`,\n  summary,\n  source || url ? `Source: ${source} ${url}`.trim() : '',\n  question,\n  'Hit the button and type 1 to 3 rough sentences. Typos are fine. Your words become Thursday\\'s post, and nothing gets added that you did not say.',\n  'No reply by Thursday 6:55am and Thursday uses your opinion bank, or a debate post that takes no side.',\n].filter(Boolean).join('\\n\\n');\nreturn [{ json: { trend, summary, source, url, question, message, for_date: $('Pick news for take').first().json.for_date } }];\n"
+   }
+  },
+  {
+   "id": "3023b61e-a8aa-4dc7-9b21-d6e0ac0c6811",
+   "name": "Ask Josh for his take",
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.1,
+   "position": [
+    1320,
+    600
+   ],
+   "parameters": {
+    "resource": "message",
+    "operation": "sendAndWait",
+    "sendTo": "you@example.com",
+    "subject": "=Thursday post: your take on {{ $json.trend }}?",
+    "message": "={{ $json.message }}",
+    "responseType": "freeText",
+    "options": {
+     "messageButtonLabel": "Give my take",
+     "responseFormTitle": "Your take for Thursday",
+     "responseFormDescription": "={{ $json.trend }}: {{ $json.question }}",
+     "responseFormButtonLabel": "Send",
+     "limitWaitTime": {
+      "values": {
+       "limitType": "atSpecifiedTime",
+       "maxDateAndTime": "={{ $now.setZone('America/Chicago').plus({ days: 1 }).set({ hour: 6, minute: 55, second: 0 }).toISO() }}"
+      }
+     },
+     "appendAttribution": false
+    }
+   },
+   "webhookId": "1ef94f77-8f41-4b76-8364-30ec762e1ce6",
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "<credential-id>",
+     "name": "Gmail account"
+    }
+   }
+  },
+  {
+   "id": "d701a396-3218-4b4b-b219-543efd00f85d",
+   "name": "Replied?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1540,
+    600
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "2d9c411b-bcee-4316-8202-67098a8216d3",
+       "leftValue": "={{ String($json.data?.text || '').trim().length > 0 }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "2243d643-0328-4e40-8195-e60400303b9d",
+   "name": "Save take",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    1760,
+    520
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "insert",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_takes-table-id>"
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "take": "={{ String($json.data.text).trim() }}",
+      "source": "reply",
+      "trend": "={{ $('Read trend').first().json.trend }}",
+      "trend_url": "={{ $('Read trend').first().json.url }}",
+      "for_date": "={{ $('Read trend').first().json.for_date }}",
+      "used_on": ""
+     },
+     "schema": [
+      {
+       "id": "take",
+       "displayName": "take",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "source",
+       "displayName": "source",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "trend",
+       "displayName": "trend",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "trend_url",
+       "displayName": "trend_url",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "for_date",
+       "displayName": "for_date",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "used_on",
+       "displayName": "used_on",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "ebea3ecf-cae2-4d5c-955c-039f3c8c5f48",
+   "name": "Thursdays 2pm",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    1040
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "0 14 * * 4"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "006745e4-d295-4fea-b3da-e8fff457c527",
+   "name": "Build ask",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    1120
+   ],
+   "parameters": {
+    "jsCode": "const friday = $now.setZone('America/Chicago').plus({ days: 1 }).toISODate();\nconst message = [\n  'What did you build or learn this week?',\n  \"Hit the button and type 2 or 3 rough lines. Typos are fine. Your words become Friday's post, and nothing gets added that you did not say.\",\n  'Got a screenshot? Drop ONE picture in My Drive/LinkedIn/build-pics before Friday 7am and the approval email will offer it. Check it shows no client names, emails, keys or employer screens.',\n  'No reply by Friday 6:55am and Friday is a myth post.',\n].join('\\n\\n');\nreturn [{ json: { for_date: friday, message } }];\n"
+   }
+  },
+  {
+   "id": "8d747a1f-584f-4e26-b240-2057724d0c50",
+   "name": "Ask Josh what he built",
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.1,
+   "position": [
+    440,
+    1120
+   ],
+   "parameters": {
+    "resource": "message",
+    "operation": "sendAndWait",
+    "sendTo": "you@example.com",
+    "subject": "Friday post: what did you build this week?",
+    "message": "={{ $json.message }}",
+    "responseType": "freeText",
+    "options": {
+     "messageButtonLabel": "Tell it what I built",
+     "responseFormTitle": "Your build log for Friday",
+     "responseFormDescription": "What you built or learned this week, in your own words.",
+     "responseFormButtonLabel": "Send",
+     "limitWaitTime": {
+      "values": {
+       "limitType": "atSpecifiedTime",
+       "maxDateAndTime": "={{ $now.setZone('America/Chicago').plus({ days: 1 }).set({ hour: 6, minute: 55, second: 0 }).toISO() }}"
+      }
+     },
+     "appendAttribution": false
+    }
+   },
+   "webhookId": "6df4653f-c46b-4647-a963-c6e7b4133c4a",
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "<credential-id>",
+     "name": "Gmail account"
+    }
+   }
+  },
+  {
+   "id": "377bfc9f-081b-4a6b-9d80-4d89c3d40a54",
+   "name": "Built reply?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    660,
+    1120
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "56f7ab99-8f55-4505-88e5-e6d92dc2e284",
+       "leftValue": "={{ String($json.data?.text || '').trim().length > 0 }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "91a5452e-7fda-4ebf-a36a-56fc25c1702c",
+   "name": "Save build note",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    880,
+    1040
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "insert",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "<li_takes-table-id>"
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "take": "={{ String($json.data.text).trim() }}",
+      "source": "build",
+      "trend": "",
+      "trend_url": "",
+      "for_date": "={{ $('Build ask').first().json.for_date }}",
+      "used_on": ""
+     },
+     "schema": [
+      {
+       "id": "take",
+       "displayName": "take",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "source",
+       "displayName": "source",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "trend",
+       "displayName": "trend",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "trend_url",
+       "displayName": "trend_url",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "for_date",
+       "displayName": "for_date",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "used_on",
+       "displayName": "used_on",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "27448ea1-8902-467e-a7a9-6a35da8bab2b",
+   "name": "Note",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    -40,
+    -420
+   ],
+   "parameters": {
+    "width": 520,
+    "height": 300,
+    "content": "## LinkedIn Daily Post v2\nMon concept, Tue news for logistics, Wed beginner skill, Thu Joshua's take, Fri build log (asked Thu 2pm, myth if no reply).\nFriday picture: drop ONE image in My Drive/LinkedIn/build-pics. It moves to _used once posted.\n\nTopics: data table li_topics (pillar = concept or skill). Add rows any time.\nOpinion bank: data table li_takes, source = bank, leave used_on empty.\nHistory: li_posts. Every draft is logged with its status. Edit notes are saved in edit_notes.\n\nEdit it: your note goes back to the writer and a new draft is emailed. Repeats until 6pm.\nNothing posts unless you choose to post. No reply by 6pm and the day is skipped."
+   }
+  }
+ ],
+ "connections": {
+  "Weekdays 7am": {
+   "main": [
+    [
+     {
+      "node": "Plan the day",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Plan the day": {
+   "main": [
+    [
+     {
+      "node": "Load post history",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Load post history": {
+   "main": [
+    [
+     {
+      "node": "Load topics",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Load topics": {
+   "main": [
+    [
+     {
+      "node": "Load takes",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Load takes": {
+   "main": [
+    [
+     {
+      "node": "Feed list",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Feed list": {
+   "main": [
+    [
+     {
+      "node": "Read feeds",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read feeds": {
+   "main": [
+    [
+     {
+      "node": "Prepare brief",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Prepare brief": {
+   "main": [
+    [
+     {
+      "node": "Write draft",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Write draft": {
+   "main": [
+    [
+     {
+      "node": "Clean and check",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Clean and check": {
+   "main": [
+    [
+     {
+      "node": "Needs rewrite?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Rewrite without claims": {
+   "main": [
+    [
+     {
+      "node": "Clean rewrite",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Clean rewrite": {
+   "main": [
+    [
+     {
+      "node": "Log draft",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log draft": {
+   "main": [
+    [
+     {
+      "node": "Find picture",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Find picture": {
+   "main": [
+    [
+     {
+      "node": "Pick picture",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Pick picture": {
+   "main": [
+    [
+     {
+      "node": "Draft to send",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Draft to send": {
+   "main": [
+    [
+     {
+      "node": "Got picture?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ask Josh to approve": {
+   "main": [
+    [
+     {
+      "node": "Read approval",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ask Josh to approve (picture)": {
+   "main": [
+    [
+     {
+      "node": "Read approval",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read approval": {
+   "main": [
+    [
+     {
+      "node": "Edit?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ask again": {
+   "main": [
+    [
+     {
+      "node": "Draft to send",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Load draft to edit": {
+   "main": [
+    [
+     {
+      "node": "Prepare redraft",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Prepare redraft": {
+   "main": [
+    [
+     {
+      "node": "Write redraft",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Write redraft": {
+   "main": [
+    [
+     {
+      "node": "Clean redraft",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Clean redraft": {
+   "main": [
+    [
+     {
+      "node": "Save redraft",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Save redraft": {
+   "main": [
+    [
+     {
+      "node": "Redraft ready",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Redraft ready": {
+   "main": [
+    [
+     {
+      "node": "Draft to send",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Pick Post Time": {
+   "main": [
+    [
+     {
+      "node": "Wait For Post Time",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Wait For Post Time": {
+   "main": [
+    [
+     {
+      "node": "Load final draft",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Load final draft": {
+   "main": [
+    [
+     {
+      "node": "Picture post?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Post to LinkedIn": {
+   "main": [
+    [
+     {
+      "node": "Mark posted",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Mark posted": {
+   "main": [
+    [
+     {
+      "node": "Mark topic used",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Mark take used",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Needs rewrite?": {
+   "main": [
+    [
+     {
+      "node": "Rewrite without claims",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Log draft",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Got picture?": {
+   "main": [
+    [
+     {
+      "node": "Ask Josh to approve (picture)",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Ask Josh to approve",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Edit?": {
+   "main": [
+    [
+     {
+      "node": "Note given?",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Approved?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Note given?": {
+   "main": [
+    [
+     {
+      "node": "Load draft to edit",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Ask again",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Approved?": {
+   "main": [
+    [
+     {
+      "node": "Pick Post Time",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Mark rejected or skipped",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Picture post?": {
+   "main": [
+    [
+     {
+      "node": "Download picture",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Post to LinkedIn",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Download picture": {
+   "main": [
+    [
+     {
+      "node": "Post to LinkedIn (picture)",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Post to LinkedIn",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Post to LinkedIn (picture)": {
+   "main": [
+    [
+     {
+      "node": "Mark posted",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Move picture to used",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Post to LinkedIn",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Wednesdays 9am": {
+   "main": [
+    [
+     {
+      "node": "Feed list (take)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Feed list (take)": {
+   "main": [
+    [
+     {
+      "node": "Read feeds (take)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read feeds (take)": {
+   "main": [
+    [
+     {
+      "node": "Pick news for take",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Pick news for take": {
+   "main": [
+    [
+     {
+      "node": "Choose the trend",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Choose the trend": {
+   "main": [
+    [
+     {
+      "node": "Read trend",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read trend": {
+   "main": [
+    [
+     {
+      "node": "Ask Josh for his take",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ask Josh for his take": {
+   "main": [
+    [
+     {
+      "node": "Replied?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Replied?": {
+   "main": [
+    [
+     {
+      "node": "Save take",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Thursdays 2pm": {
+   "main": [
+    [
+     {
+      "node": "Build ask",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build ask": {
+   "main": [
+    [
+     {
+      "node": "Ask Josh what he built",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ask Josh what he built": {
+   "main": [
+    [
+     {
+      "node": "Built reply?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Built reply?": {
+   "main": [
+    [
+     {
+      "node": "Save build note",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Chicago",
+  "callerPolicy": "workflowsFromSameOwner"
+ }
+}
